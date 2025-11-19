@@ -6,14 +6,20 @@ import { getServiceClient } from "@/lib/supabase";
 import type { Database } from "@/types/database";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
+type ResponseOutputItem = {
+  type?: string;
+  content?: Array<{ type?: string; text?: string[] }>;
+};
 
-function extractText(output: OpenAI.Responses.OutputItem[] | null | undefined) {
+function extractText(output: ResponseOutputItem[] | null | undefined) {
   if (!output?.length) return "{}";
   for (const item of output) {
     if (item.type === "message") {
-      const textChunk = item.content.find((part) => part.type === "output_text");
+      const textChunk = item.content?.find(
+        (part) => part.type === "output_text"
+      );
       if (textChunk && textChunk.type === "output_text") {
-        return textChunk.text.join(" ").trim();
+        return textChunk.text?.join(" ").trim() || "{}";
       }
     }
   }
