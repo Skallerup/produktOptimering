@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## ProduktOptimering
 
-## Getting Started
+Next.js 16 app der scanner WooCommerce-produkter, gemmer data i Supabase og bruger din egen OpenAI-nøgle til at producere rapporter med manglende oplysninger, spørgsmål og optimeringsforslag. Designet til Vercel hosting.
 
-First, run the development server:
+## Tech stack
+
+- Next.js App Router (serverless/edge klar til Vercel)
+- Supabase (Postgres + API)
+- OpenAI Responses API (`gpt-4.1-mini`)
+- Tailwind CSS v4 (utility-klasser via `@import "tailwindcss"`)
+- TypeScript + Zod til validering
+
+## Miljøvariabler
+
+| Navn | Beskrivelse |
+| --- | --- |
+| `SUPABASE_URL` | Public REST URL til din Supabase-projekt |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (bruges kun på serveren) |
+
+Gem disse i `.env.local` under udvikling og som Environment Variables på Vercel (`Project Settings → Environment Variables`). Service role nøglen må **aldrig** udsættes i klientkode.
+
+## Database
+
+Supabase-tabeller findes som SQL-migration i `supabase/migrations/0001_init.sql`. Kør den via Supabase dashboard eller `supabase db push`.
+
+Oversigt:
+
+- `stores` — én række per WooCommerce-base-URL
+- `products` — snapshot af hver produktside inkl. metadata
+- `analyses` — AI-output per produkt
+
+## Lokalt setup
 
 ```bash
+cd webapp
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Appen kører på `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy på Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Opret et nyt projekt i Vercel og peg det mod repoet.
+2. Tilføj miljøvariablerne `SUPABASE_URL` og `SUPABASE_SERVICE_ROLE_KEY`.
+3. Deploy — Vercel bygger automatisk med `npm run build`.
 
-## Learn More
+## Brugerguide
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Indtast WooCommerce URL og tryk “Scan webshop”. Appen bruger WooCommerce Store API til at hente produkter og gemmer dem i Supabase.
+2. Vælg de produkter, der skal analyseres (enten top N eller egne valg).
+3. Indtast din private OpenAI API-nøgle (lagres ikke) og start analysen.
+4. Resultatet viser resume, manglende info, optimeringsforslag og SEO-noter.
