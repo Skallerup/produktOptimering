@@ -3,6 +3,9 @@ import { z } from "zod";
 import OpenAI from "openai";
 
 import { getServiceClient } from "@/lib/supabase";
+import type { Database } from "@/types/database";
+
+type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 const requestSchema = z.object({
   storeId: z.string().uuid(),
@@ -67,7 +70,8 @@ export async function POST(request: Request) {
       query = query.in("id", productIds);
     }
 
-    const { data: products, error: productsError } = await query;
+    const { data: products, error: productsError } =
+      await query.returns<ProductRow[]>();
 
     if (productsError || !products?.length) {
       return NextResponse.json(
