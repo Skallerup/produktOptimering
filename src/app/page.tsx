@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Loader2,
   RefreshCw,
   ScanLine,
@@ -89,6 +90,38 @@ const instructionOptions: {
   },
 ];
 
+const depthLabels: Record<number, string> = {
+  1: "Pitch (kort & punchy)",
+  2: "Overblik (få detaljer)",
+  3: "Standard (balanceret)",
+  4: "Dybdegående (historier + bullets)",
+  5: "Ekspert (meget detaljeret)",
+};
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/40 px-2 py-1 text-xs text-slate-200 hover:border-white/30"
+    >
+      <Copy className="size-3" />
+      {copied ? "Kopieret" : "Kopiér"}
+    </button>
+  );
+}
+
 function buildInstructionText(settings: InstructionSettings) {
   const parts: string[] = [];
   if (settings.ignoreSizes) {
@@ -148,6 +181,23 @@ export default function Home() {
     Record<string, OptimizationResult>
   >({});
   const [optimizing, setOptimizing] = useState<Record<string, boolean>>({});
+  const [longDepth, setLongDepth] = useState(3);
+  const createMarkup = (value: string) => ({
+    __html: value || "",
+  });
+  const renderRankedList = (items: string[], emptyLabel: string) => {
+    if (!items.length) {
+      return <li>{emptyLabel}</li>;
+    }
+    return items.map((item, index) => (
+      <li key={index}>
+        <span className="mr-1 font-semibold text-emerald-300">
+          #{index + 1}
+        </span>
+        {item}
+      </li>
+    ));
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -207,6 +257,7 @@ export default function Home() {
     setRestoreMessage(null);
     setRestoreStatus("idle");
     setInstructionSettings(DEFAULT_INSTRUCTIONS);
+    setLongDepth(3);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
@@ -367,6 +418,7 @@ export default function Home() {
           productId: product.id,
           openAiKey,
           instructions: currentInstructions,
+          depthLevel: longDepth,
         }),
       });
       const data = await response.json();
@@ -600,6 +652,25 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
+                <div className="space-y-2 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <div className="flex items-center justify-between text-sm text-slate-200">
+                    <p>Detaljeringsgrad for lang tekst</p>
+                    <span className="font-semibold text-white">
+                      {depthLabels[longDepth]}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    value={longDepth}
+                    onChange={(event) => setLongDepth(Number(event.target.value))}
+                    className="w-full accent-violet-400"
+                  />
+                  <p className="text-xs text-slate-400">
+                    Niveau {longDepth} · {depthLabels[longDepth]}
+                  </p>
+                </div>
 
                 <label className="text-sm font-medium text-slate-200">
                   Din OpenAI nøgle
@@ -681,77 +752,88 @@ export default function Home() {
                         {analysis && (
                           <div className="mt-4 space-y-5 text-sm text-slate-200">
                             <div>
-                              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                Resume
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                  Resume
+                                </p>
+                                <CopyButton text={analysis.summary} />
+                              </div>
                               <p className="mt-1 text-base text-white">
                                 {analysis.summary}
-                              </p>
-                            </div>
+          </p>
+        </div>
 
                             {[
                               { title: "Kort tekst", section: analysis.short_text },
                               { title: "Lang tekst", section: analysis.long_text },
-                            ].map(({ title, section }) => (
-                              <div
-                                key={title}
-                                className="rounded-2xl border border-white/5 bg-slate-900/20 p-3"
-                              >
-                                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                  {title} · Manglende info
-                                </p>
-                                <ul className="mt-1 list-disc space-y-1 pl-4">
-                                  {section.missing_information_questions.length ? (
-                                    section.missing_information_questions.map(
-                                      (item, index) => <li key={index}>{item}</li>
-                                    )
-                                  ) : (
-                                    <li>Ingen huller registreret.</li>
-                                  )}
-                                </ul>
-                                <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">
-                                  {title} · Optimeringsforslag
-                                </p>
-                                <ul className="mt-1 list-disc space-y-1 pl-4">
-                                  {section.optimization_suggestions.length ? (
-                                    section.optimization_suggestions.map(
-                                      (item, index) => <li key={index}>{item}</li>
-                                    )
-                                  ) : (
-                                    <li>Ingen forslag i denne sektion.</li>
-                                  )}
-                                </ul>
-                              </div>
-                            ))}
+                            ].map(({ title, section }) => {
+                              const copyPayload = [
+                                `${title} · Manglende info`,
+                                ...section.missing_information_questions,
+                                "",
+                                `${title} · Optimeringsforslag`,
+                                ...section.optimization_suggestions,
+                              ]
+                                .filter(Boolean)
+                                .join("\n");
+                              return (
+                                <div
+                                  key={title}
+                                  className="rounded-2xl border border-white/5 bg-slate-900/20 p-3"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                      {title} · Manglende info
+                                    </p>
+                                    <CopyButton text={copyPayload} />
+                                  </div>
+                                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                                    {renderRankedList(
+                                      section.missing_information_questions,
+                                      "Ingen huller registreret."
+                                    )}
+                                  </ul>
+                                  <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">
+                                    {title} · Optimeringsforslag
+                                  </p>
+                                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                                    {renderRankedList(
+                                      section.optimization_suggestions,
+                                      "Ingen forslag i denne sektion."
+                                    )}
+                                  </ul>
+                                </div>
+                              );
+                            })}
 
                             <div>
-                              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                Kundespørgsmål / potentiale
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                  Kundespørgsmål / potentiale
+                                </p>
+                                <CopyButton
+                                  text={analysis.customer_questions.join("\n")}
+                                />
+                              </div>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {analysis.customer_questions.length ? (
-                                  analysis.customer_questions.map(
-                                    (question, index) => (
-                                      <li key={index}>{question}</li>
-                                    )
-                                  )
-                                ) : (
-                                  <li>Ingen åbne spørgsmål.</li>
+                                {renderRankedList(
+                                  analysis.customer_questions,
+                                  "Ingen åbne spørgsmål."
                                 )}
                               </ul>
                             </div>
 
                             <div>
-                              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                SEO noter
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                  SEO noter
+                                </p>
+                                <CopyButton text={analysis.seo_notes.join("\n")} />
+                              </div>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {analysis.seo_notes.length ? (
-                                  analysis.seo_notes.map((note, index) => (
-                                    <li key={index}>{note}</li>
-                                  ))
-                                ) : (
-                                  <li>Ingen noter i denne omgang.</li>
+                                {renderRankedList(
+                                  analysis.seo_notes,
+                                  "Ingen noter i denne omgang."
                                 )}
                               </ul>
                             </div>
@@ -782,27 +864,56 @@ export default function Home() {
                             {optimizations[product.id] && (
                               <div className="space-y-3 text-sm text-slate-200">
                                 <div>
-                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                    Ny kort tekst
-                                  </p>
-                                  <p className="mt-1 text-white">
-                                    {optimizations[product.id]
-                                      .short_description ?? ""}
-                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                      Ny kort tekst
+                                    </p>
+                                    <CopyButton
+                                      text={
+                                        optimizations[product.id]
+                                          .short_description ?? ""
+                                      }
+                                    />
+                                  </div>
+                                  <div
+                                    className="mt-1 text-white whitespace-pre-wrap"
+                                    dangerouslySetInnerHTML={createMarkup(
+                                      optimizations[product.id]
+                                        .short_description ?? ""
+                                    )}
+                                  />
                                 </div>
                                 <div>
-                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                    Ny lang tekst
-                                  </p>
-                                  <p className="mt-1 text-white whitespace-pre-wrap">
-                                    {optimizations[product.id].description ?? ""}
-                                  </p>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                      Ny lang tekst
+                                    </p>
+                                    <CopyButton
+                                      text={
+                                        optimizations[product.id].description ??
+                                        ""
+                                      }
+                                    />
+                                  </div>
+                                  <div
+                                    className="mt-1 text-white whitespace-pre-wrap"
+                                    dangerouslySetInnerHTML={createMarkup(
+                                      optimizations[product.id].description ?? ""
+                                    )}
+                                  />
                                 </div>
                                 {optimizations[product.id].notes?.length ? (
                                   <div>
-                                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                      Noter
-                                    </p>
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                        Noter
+                                      </p>
+                                      <CopyButton
+                                        text={optimizations[
+                                          product.id
+                                        ].notes!.join("\n")}
+                                      />
+                                    </div>
                                     <ul className="mt-1 list-disc space-y-1 pl-4">
                                       {optimizations[product.id].notes!.map(
                                         (note, index) => (
@@ -824,7 +935,7 @@ export default function Home() {
             )}
           </div>
         </section>
-      </div>
+        </div>
     </div>
   );
 }

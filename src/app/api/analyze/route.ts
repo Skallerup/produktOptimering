@@ -140,7 +140,7 @@ export async function POST(request: Request) {
       ]
         .filter(Boolean)
         .join("\n\n");
-      const formatRequirements = `Returnér JSON med præcis denne struktur:
+      const formatRequirements = `Returnér JSON med præcis denne struktur (array-indgange skal være sorteret efter vigtighed, vigtigste først):
 {
   "summary": string,
   "short_text": {
@@ -174,7 +174,7 @@ ${formatRequirements}
 `;
 
       const response = await client.responses.create({
-        model: "gpt-4.1-mini",
+        model: "gpt-5.1-mini",
         input: [
           {
             role: "system",
@@ -218,7 +218,7 @@ ${formatRequirements}
 
       const insertPayload: AnalysisInsert = {
         product_id: product.id,
-        model: response.model ?? "gpt-4.1-mini",
+        model: response.model ?? "gpt-5.1-mini",
         analysis: parsedResult as Json,
       };
       await insertAnalysis(insertPayload);

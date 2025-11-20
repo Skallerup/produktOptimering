@@ -16,6 +16,7 @@ const requestSchema = z.object({
   productId: z.string().uuid(),
   openAiKey: z.string().min(40),
   instructions: z.string().optional(),
+  depthLevel: z.number().int().min(1).max(5).default(3),
 });
 
 const rewriteSchema = z.object({
@@ -26,6 +27,14 @@ const rewriteSchema = z.object({
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const depthGuidance: Record<number, string> = {
+  1: "Dybde 1: Lav en ultra kort langtekst (max 2 sætninger) – fokus på elevator pitch uden detaljer.",
+  2: "Dybde 2: Kort longform med 3-4 nøglepointer og et par emojis.",
+  3: "Dybde 3: Balanceret longform med 4-5 afsnit eller bullets, tydelige sektionstitler i <strong>bold</strong> og relevante emojis.",
+  4: "Dybde 4: Inddrag detaljerede scenarier, bullets og microcopy til CTA'er. Brug flere emojis og <strong>bold</strong> for at fremhæve benefits.",
+  5: "Dybde 5: Skriv en dybdegående longform med storytelling, bullets, tabeller (HTML), CTA-sektion og rig brug af <strong>bold</strong>/emojis for at fremhæve hvert kernepunkt.",
+};
 
 function extractText(output: OpenAI.Responses.Response["output"]) {
   if (!Array.isArray(output)) return "{}";
@@ -92,7 +101,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { productId, openAiKey, instructions } = parsed.data;
+    const { productId, openAiKey, instructions, depthLevel } = parsed.data;
 
     const supabase = getServiceClient();
     const { data: product, error: productError } = await supabase
@@ -108,9 +117,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const depthInstruction =
+      depthGuidance[depthLevel] ?? depthGuidance[3];
+
     const client = new OpenAI({ apiKey: openAiKey });
     const response = await client.responses.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-5.1-mini",
       input: [
         {
           role: "system",
@@ -118,7 +130,9 @@ export async function POST(request: Request) {
             "Du er en dansk copywriter for e-commerce. Du modtager produktinformation og skal levere en optimeret kort beskrivelse samt en længere beskrivelse.",
             "Ignorér størrelsesguider og kundeanmeldelser, da de håndteres separat på websitet.",
             "Lav separate optimeringsforslag for kort og lang tekst.",
-            "Returnér altid gyldigt JSON med felterne short_description, description og valgfrit notes (array af strenge).",
+            "Longform-teksten skal være HTML med <strong>bold</strong>, <em>italics</em> ved behov, bullet-lister og relevante emojis. Brug tydelige sektionstitler.",
+            depthInstruction,
+            "Returnér altid gyldigt JSON med felterne short_description, description (HTML-string) og valgfrit notes (array af strenge).",
             instructions?.trim()
               ? `Yderligere instruktioner:\n${instructions.trim()}`
               : null,
@@ -166,7 +180,7 @@ Lever nu:
 
     await insertAnalysis({
       product_id: product.id,
-      model: response.model ?? "gpt-4.1-mini",
+      model: response.model ?? "gpt-5.1-mini",
       analysis: {
         kind: "rewrite",
         result: parsedResult,
