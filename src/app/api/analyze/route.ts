@@ -66,7 +66,6 @@ const responseSchema = {
     ],
     additionalProperties: false,
   },
-  strict: true,
 } as const;
 
 export const runtime = "nodejs";
@@ -140,7 +139,6 @@ Opgave:
             json_schema: {
               name: responseSchema.name,
               schema: responseSchema.schema,
-              strict: responseSchema.strict,
             },
           },
         },
