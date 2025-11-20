@@ -13,6 +13,9 @@ type ResponseMessage = Extract<
   { type: "message" }
 >;
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 function extractText(output: OpenAI.Responses.Response["output"]) {
   if (!Array.isArray(output)) return "{}";
   const message = output.find(
@@ -30,6 +33,36 @@ function extractText(output: OpenAI.Responses.Response["output"]) {
     return textPart.text.trim() || "{}";
   }
   return "{}";
+}
+
+async function insertAnalysis(payload: AnalysisInsert) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Supabase environment vars mangler til analyse insert.");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/analyses`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify([payload]),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Kunne ikke gemme analysen via REST: ${response.status} ${text}`
+    );
+  }
+
+  const data = (await response.json()) as AnalysisRow[];
+  if (!data.length) {
+    throw new Error("REST API returnerede ingen analyse.");
+  }
+  return data[0];
 }
 
 const requestSchema = z.object({
@@ -150,18 +183,7 @@ Opgave:
         model: response.model ?? "gpt-4.1-mini",
         analysis: parsedResult as Json,
       };
-      const { data: savedAnalysis, error: analysisError } = await supabase
-        .from("analyses")
-        .insert<AnalysisInsert>(insertPayload)
-        .select()
-        .single()
-        .returns<AnalysisRow>();
-
-      if (analysisError || !savedAnalysis) {
-        throw new Error(
-          analysisError?.message ?? "Kunne ikke gemme analysen."
-        );
-      }
+      await insertAnalysis(insertPayload);
 
       results.push({
         productId: product.id,
