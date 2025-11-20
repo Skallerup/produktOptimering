@@ -8,18 +8,23 @@ import type { Database } from "@/types/database";
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type ResponseOutputItem = {
   type?: string;
-  content?: Array<{ type?: string; text?: string[] }>;
+  content?: Array<{ type?: string; text?: string[] | string }>;
 };
 
-function extractText(output: ResponseOutputItem[] | null | undefined) {
-  if (!output?.length) return "{}";
-  for (const item of output) {
+function extractText(output: unknown) {
+  if (!Array.isArray(output)) return "{}";
+
+  for (const rawItem of output as ResponseOutputItem[]) {
+    const item = rawItem ?? {};
     if (item.type === "message") {
-      const textChunk = item.content?.find(
-        (part) => part.type === "output_text"
-      );
+      const textChunk = item.content?.find((part) => part?.type === "output_text");
       if (textChunk && textChunk.type === "output_text") {
-        return textChunk.text?.join(" ").trim() || "{}";
+        if (Array.isArray(textChunk.text)) {
+          return textChunk.text.join(" ").trim() || "{}";
+        }
+        if (typeof textChunk.text === "string") {
+          return textChunk.text;
+        }
       }
     }
   }
