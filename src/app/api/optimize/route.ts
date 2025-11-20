@@ -14,19 +14,11 @@ const requestSchema = z.object({
   instructions: z.string().optional(),
 });
 
-const rewriteSchema = {
-  type: "object",
-  properties: {
-    short_description: { type: "string" },
-    description: { type: "string" },
-    notes: {
-      type: "array",
-      items: { type: "string" },
-    },
-  },
-  required: ["short_description", "description"],
-  additionalProperties: false,
-} as const;
+const rewriteSchema = z.object({
+  short_description: z.string(),
+  description: z.string(),
+  notes: z.array(z.string()).optional(),
+});
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -96,15 +88,6 @@ export async function POST(request: Request) {
     const client = new OpenAI({ apiKey: openAiKey });
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
-      text: {
-        format: {
-          type: "json_schema",
-          json_schema: {
-            name: "ProductRewrite",
-            schema: rewriteSchema,
-          },
-        },
-      },
       input: [
         {
           role: "system",
@@ -112,6 +95,7 @@ export async function POST(request: Request) {
             "Du er en dansk copywriter for e-commerce. Du modtager produktinformation og skal levere en optimeret kort beskrivelse samt en længere beskrivelse.",
             "Ignorér størrelsesguider og kundeanmeldelser, da de håndteres separat på websitet.",
             "Lav separate optimeringsforslag for kort og lang tekst.",
+            "Returnér altid gyldigt JSON med felterne short_description, description og valgfrit notes (array af strenge).",
             instructions?.trim()
               ? `Yderligere instruktioner:\n${instructions.trim()}`
               : null,
@@ -149,7 +133,13 @@ Lever nu:
     };
 
     try {
-      parsedResult = JSON.parse(content);
+      const candidate = JSON.parse(content);
+      const check = rewriteSchema.safeParse(candidate);
+      if (check.success) {
+        parsedResult = check.data;
+      } else {
+        console.warn("Rewrite schema validation failed", check.error.flatten());
+      }
     } catch (parseError) {
       console.error("Kunne ikke parse OpenAI rewrite output", parseError);
     }
