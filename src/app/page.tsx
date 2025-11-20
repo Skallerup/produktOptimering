@@ -30,7 +30,81 @@ type Analysis = {
   seo_notes: string[];
 };
 
+type OptimizationResult = {
+  short_description: string;
+  description: string;
+  notes?: string[];
+};
+
 const STORAGE_KEY = "produktoptimering:lastStore";
+const INSTRUCTION_STORAGE_KEY = "produktoptimering:instructions";
+
+type InstructionSettings = {
+  ignoreSizes: boolean;
+  ignoreReviews: boolean;
+  separateTexts: boolean;
+  questionFocus: boolean;
+};
+
+const DEFAULT_INSTRUCTIONS: InstructionSettings = {
+  ignoreSizes: true,
+  ignoreReviews: true,
+  separateTexts: true,
+  questionFocus: true,
+};
+
+const instructionOptions: {
+  id: keyof InstructionSettings;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "ignoreSizes",
+    label: "Ignorér størrelsesguides",
+    description:
+      "Skanneren kan ikke læse størrelsesguides – antag at de findes i butikken.",
+  },
+  {
+    id: "ignoreReviews",
+    label: "Ignorér anmeldelser",
+    description: "Kundeanmeldelser håndteres separat.",
+  },
+  {
+    id: "separateTexts",
+    label: "Optimer kort og lang tekst separat",
+    description:
+      "Giv dedikerede forslag til både kort og lang beskrivelse i stedet for en samlet udgave.",
+  },
+  {
+    id: "questionFocus",
+    label: "Fokusér på spørgsmål og misforståelser",
+    description:
+      "Find uafdækkede funktioner, skader og fordele – stil spørgsmål som en potentiel kunde.",
+  },
+];
+
+function buildInstructionText(settings: InstructionSettings) {
+  const parts: string[] = [];
+  if (settings.ignoreSizes) {
+    parts.push(
+      "- Ignorér størrelsesguides, da de allerede findes på produktsiderne."
+    );
+  }
+  if (settings.ignoreReviews) {
+    parts.push("- Ignorér kundeanmeldelser helt.");
+  }
+  if (settings.separateTexts) {
+    parts.push(
+      "- Giv separate vurderinger og optimeringsforslag for både kort og lang tekst."
+    );
+  }
+  if (settings.questionFocus) {
+    parts.push(
+      "- Opfør dig som en potentiel kunde: find spørgsmål, misforståelser og mangler i teksten, især omkring funktioner, skader og forebyggelse."
+    );
+  }
+  return parts.join("\n");
+}
 
 export default function Home() {
   const [storeUrl, setStoreUrl] = useState("");
@@ -50,6 +124,24 @@ export default function Home() {
     "idle" | "loading" | "error" | "success"
   >("idle");
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [instructionSettings, setInstructionSettings] = useState<
+    InstructionSettings
+  >(() => {
+    if (typeof window === "undefined") return DEFAULT_INSTRUCTIONS;
+    try {
+      const stored = window.localStorage.getItem(INSTRUCTION_STORAGE_KEY);
+      if (stored) {
+        return { ...DEFAULT_INSTRUCTIONS, ...JSON.parse(stored) };
+      }
+    } catch {
+      /* noop */
+    }
+    return DEFAULT_INSTRUCTIONS;
+  });
+  const [optimizations, setOptimizations] = useState<
+    Record<string, OptimizationResult>
+  >({});
+  const [optimizing, setOptimizing] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -108,8 +200,10 @@ export default function Home() {
     setStoreUrl("");
     setRestoreMessage(null);
     setRestoreStatus("idle");
+    setInstructionSettings(DEFAULT_INSTRUCTIONS);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
     }
   };
 
@@ -170,6 +264,19 @@ export default function Home() {
         : [...prev, productId]
     );
   };
+  const toggleInstruction = (key: keyof InstructionSettings) => {
+    setInstructionSettings((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          INSTRUCTION_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      }
+      return next;
+    });
+  };
+  const currentInstructions = buildInstructionText(instructionSettings);
 
   const handleAnalyze = async () => {
     if (!storeId) {
@@ -205,6 +312,7 @@ export default function Home() {
           productIds: idsToAnalyze,
           limit: idsToAnalyze.length,
           openAiKey,
+          instructions: currentInstructions,
         }),
       });
 
@@ -235,6 +343,41 @@ export default function Home() {
       );
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleOptimize = async (product: Product) => {
+    if (!openAiKey) {
+      setError("Indtast din OpenAI nøgle for at generere tekster.");
+      return;
+    }
+    setError(null);
+    setOptimizing((prev) => ({ ...prev, [product.id]: true }));
+    try {
+      const response = await fetch("/api/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: product.id,
+          openAiKey,
+          instructions: currentInstructions,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Kunne ikke optimere teksten.");
+        return;
+      }
+      setOptimizations((prev) => ({
+        ...prev,
+        [product.id]: data.rewrite,
+      }));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Uventet fejl under optimering."
+      );
+    } finally {
+      setOptimizing((prev) => ({ ...prev, [product.id]: false }));
     }
   };
 
@@ -423,6 +566,35 @@ export default function Home() {
               </div>
 
               <div className="mt-6 space-y-4">
+                <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <p className="text-sm font-semibold text-white">
+                    Instruktioner til AI
+                  </p>
+                  <div className="space-y-2">
+                    {instructionOptions.map((option) => (
+                      <label
+                        key={option.id}
+                        className="flex items-start gap-3 rounded-xl border border-white/5 bg-slate-900/30 p-3 text-left text-sm text-slate-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={instructionSettings[option.id]}
+                          onChange={() => toggleInstruction(option.id)}
+                          className="mt-1 size-4 accent-violet-400"
+                        />
+                        <div>
+                          <p className="font-semibold text-white">
+                            {option.label}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {option.description}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <label className="text-sm font-medium text-slate-200">
                   Din OpenAI nøgle
                 </label>
@@ -547,6 +719,65 @@ export default function Home() {
                                 ))}
                               </ul>
                             </div>
+                          </div>
+                        )}
+
+                        {analysis && (
+                          <div className="mt-4 space-y-3 rounded-2xl border border-white/5 bg-slate-900/30 p-3">
+                            <button
+                              type="button"
+                              onClick={() => handleOptimize(product)}
+                              disabled={Boolean(optimizing[product.id])}
+                              className="flex items-center gap-2 rounded-xl bg-emerald-400/90 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50"
+                            >
+                              {optimizing[product.id] ? (
+                                <>
+                                  <Loader2 className="size-4 animate-spin" />
+                                  Optimerer...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="size-4" />
+                                  Generér ny tekst
+                                </>
+                              )}
+                            </button>
+
+                            {optimizations[product.id] && (
+                              <div className="space-y-3 text-sm text-slate-200">
+                                <div>
+                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                    Ny kort tekst
+                                  </p>
+                                  <p className="mt-1 text-white">
+                                    {optimizations[product.id]
+                                      .short_description ?? ""}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                    Ny lang tekst
+                                  </p>
+                                  <p className="mt-1 text-white whitespace-pre-wrap">
+                                    {optimizations[product.id].description ?? ""}
+                                  </p>
+                                </div>
+                                {optimizations[product.id].notes?.length ? (
+                                  <div>
+                                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                      Noter
+                                    </p>
+                                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                                      {optimizations[product.id].notes!.map(
+                                        (note, index) => (
+                                          <li key={index}>{note}</li>
+                                        )
+                                      )}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
                           </div>
                         )}
                       </article>

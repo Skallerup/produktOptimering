@@ -70,6 +70,7 @@ const requestSchema = z.object({
   productIds: z.array(z.string().uuid()).optional(),
   limit: z.number().min(1).max(50).default(5),
   openAiKey: z.string().min(40),
+  instructions: z.string().optional(),
 });
 
 const analysisSchema = z.object({
@@ -93,7 +94,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { storeId, productIds, limit, openAiKey } = parsed.data;
+    const { storeId, productIds, limit, openAiKey, instructions } =
+      parsed.data;
 
     const supabase = getServiceClient();
     let query = supabase
@@ -124,8 +126,14 @@ export async function POST(request: Request) {
     const results = [];
 
     for (const product of products) {
-      const systemPrompt =
-        "Du er en dansk e-commerce specialist, der optimerer WooCommerce produktbeskrivelser. Returnér altid JSON.";
+      const systemPrompt = [
+        "Du er en dansk e-commerce specialist, der optimerer WooCommerce produktbeskrivelser. Returnér altid JSON.",
+        instructions?.trim()
+          ? `Yderligere instruktioner:\n${instructions.trim()}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const userPrompt = `
 Produktnavn: ${product.name}
 Kort beskrivelse: ${product.short_description ?? "N/A"}
