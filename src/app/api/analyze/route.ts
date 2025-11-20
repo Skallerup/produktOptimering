@@ -8,27 +8,26 @@ import type { Database, Json } from "@/types/database";
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type AnalysisRow = Database["public"]["Tables"]["analyses"]["Row"];
 type AnalysisInsert = Database["public"]["Tables"]["analyses"]["Insert"];
-type ResponseOutputItem = {
-  type?: string;
-  content?: Array<{ type?: string; text?: string[] | string }>;
-};
+type ResponseMessage = Extract<
+  NonNullable<OpenAI.Responses.Response["output"]>[number],
+  { type: "message" }
+>;
 
-function extractText(output: unknown) {
+function extractText(output: OpenAI.Responses.Response["output"]) {
   if (!Array.isArray(output)) return "{}";
-
-  for (const rawItem of output as ResponseOutputItem[]) {
-    const item = rawItem ?? {};
-    if (item.type === "message") {
-      const textChunk = item.content?.find((part) => part?.type === "output_text");
-      if (textChunk && textChunk.type === "output_text") {
-        if (Array.isArray(textChunk.text)) {
-          return textChunk.text.join(" ").trim() || "{}";
-        }
-        if (typeof textChunk.text === "string") {
-          return textChunk.text;
-        }
-      }
-    }
+  const message = output.find(
+    (item): item is ResponseMessage => item?.type === "message"
+  );
+  if (!message) return "{}";
+  const textPart = message.content.find(
+    (part) => part.type === "output_text"
+  );
+  if (!textPart || textPart.type !== "output_text") return "{}";
+  if (Array.isArray(textPart.text)) {
+    return textPart.text.join(" ").trim() || "{}";
+  }
+  if (typeof textPart.text === "string") {
+    return textPart.text.trim() || "{}";
   }
   return "{}";
 }
@@ -151,10 +150,9 @@ Opgave:
         model: response.model ?? "gpt-4.1-mini",
         analysis: parsedResult as Json,
       };
-
       const { data: savedAnalysis, error: analysisError } = await supabase
         .from("analyses")
-        .insert([insertPayload])
+        .insert(insertPayload)
         .select()
         .single()
         .returns<AnalysisRow>();
