@@ -4,10 +4,14 @@ import { z } from "zod";
 import { crawlProducts } from "@/lib/woocommerce";
 import { normalizeStoreUrl } from "@/lib/utils";
 import { getServiceClient } from "@/lib/supabase";
+import type { Database } from "@/types/database";
 
 const bodySchema = z.object({
   storeUrl: z.string().min(3),
 });
+
+type StoreInsert = Database["public"]["Tables"]["stores"]["Insert"];
+type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
 
 export const runtime = "nodejs";
 
@@ -35,15 +39,14 @@ export async function POST(request: Request) {
 
     const supabase = getServiceClient();
 
+    const storePayload: StoreInsert = {
+      base_url: normalizedUrl,
+      last_synced_at: new Date().toISOString(),
+    };
+
     const { data: store, error: storeError } = await supabase
       .from("stores")
-      .upsert(
-        {
-          base_url: normalizedUrl,
-          last_synced_at: new Date().toISOString(),
-        },
-        { onConflict: "base_url" }
-      )
+      .upsert<StoreInsert>(storePayload, { onConflict: "base_url" })
       .select()
       .single();
 
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
 
     const { data: savedProducts, error: productError } = await supabase
       .from("products")
-      .upsert(
+      .upsert<ProductInsert>(
         snapshots.map((product) => ({
           store_id: store.id,
           remote_id: product.remoteId,
