@@ -122,7 +122,7 @@ export async function POST(request: Request) {
 
     const client = new OpenAI({ apiKey: openAiKey });
     const response = await client.responses.create({
-      model: "gpt-5.1-mini",
+      model: "gpt-4.1-mini",
       input: [
         {
           role: "system",
@@ -180,7 +180,7 @@ Lever nu:
 
     await insertAnalysis({
       product_id: product.id,
-      model: response.model ?? "gpt-5.1-mini",
+      model: response.model ?? "gpt-4.1-mini",
       analysis: {
         kind: "rewrite",
         result: parsedResult,
