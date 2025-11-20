@@ -42,7 +42,7 @@ async function restUpsert<T>(
       apikey: key,
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
-      Prefer: "return=representation",
+      Prefer: "resolution=merge-duplicates,return=representation",
     },
     body: JSON.stringify(payload),
   });
