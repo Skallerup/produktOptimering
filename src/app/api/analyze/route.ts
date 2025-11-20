@@ -6,6 +6,7 @@ import { getServiceClient } from "@/lib/supabase";
 import type { Database, Json } from "@/types/database";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
+type AnalysisRow = Database["public"]["Tables"]["analyses"]["Row"];
 type ResponseOutputItem = {
   type?: string;
   content?: Array<{ type?: string; text?: string[] | string }>;
@@ -65,6 +66,7 @@ const responseSchema = {
     ],
     additionalProperties: false,
   },
+  strict: true,
 } as const;
 
 export const runtime = "nodejs";
@@ -132,11 +134,14 @@ Opgave:
 
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
-        // Responses API expects the schema under text.format
         text: {
           format: {
             type: "json_schema",
-            json_schema: responseSchema,
+            json_schema: {
+              name: responseSchema.name,
+              schema: responseSchema.schema,
+              strict: responseSchema.strict,
+            },
           },
         },
         input: [
