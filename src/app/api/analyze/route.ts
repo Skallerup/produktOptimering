@@ -39,38 +39,12 @@ const requestSchema = z.object({
   openAiKey: z.string().min(40),
 });
 
-const responseFormat: OpenAI.ResponseCreateParams["text"]["format"] = {
-  type: "json_schema",
-  json_schema: {
-    name: "ProductOptimization",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        summary: { type: "string" },
-        missing_information_questions: {
-          type: "array",
-          items: { type: "string" },
-        },
-        optimization_suggestions: {
-          type: "array",
-          items: { type: "string" },
-        },
-        seo_notes: {
-          type: "array",
-          items: { type: "string" },
-        },
-      },
-      required: [
-        "summary",
-        "missing_information_questions",
-        "optimization_suggestions",
-        "seo_notes",
-      ],
-      additionalProperties: false,
-    },
-  },
-};
+const analysisSchema = z.object({
+  summary: z.string().min(1),
+  missing_information_questions: z.array(z.string()),
+  optimization_suggestions: z.array(z.string()),
+  seo_notes: z.array(z.string()),
+});
 
 export const runtime = "nodejs";
 
@@ -137,13 +111,12 @@ Opgave:
 
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
-        text: {
-          format: responseFormat,
-        },
         input: [
           {
             role: "system",
-            content: systemPrompt,
+            content:
+              systemPrompt +
+              "\nSvar altid som gyldigt JSON der matcher nøglerne: summary, missing_information_questions, optimization_suggestions, seo_notes.",
           },
           {
             role: "user",
@@ -154,17 +127,22 @@ Opgave:
 
       const content = extractText(response.output);
 
-      let parsedResult: unknown;
+      let parsedResult: Json = {
+        summary: "Modellen returnerede ikke gyldigt JSON.",
+        missing_information_questions: [],
+        optimization_suggestions: [],
+        seo_notes: [],
+      };
       try {
-        parsedResult = JSON.parse(content);
+        const candidate = JSON.parse(content);
+        const check = analysisSchema.safeParse(candidate);
+        if (check.success) {
+          parsedResult = check.data;
+        } else {
+          console.warn("Schema validation failed", check.error.flatten());
+        }
       } catch (parseError) {
         console.error("Kunne ikke parse OpenAI output", parseError);
-        parsedResult = {
-          summary: "Modellen returnerede ikke gyldigt JSON.",
-          missing_information_questions: [],
-          optimization_suggestions: [],
-          seo_notes: [],
-        };
       }
 
       const { data: savedAnalysis, error: analysisError } = await supabase
