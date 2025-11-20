@@ -7,6 +7,10 @@ import type { Database, Json } from "@/types/database";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type AnalysisInsert = Database["public"]["Tables"]["analyses"]["Insert"];
+type ResponseMessage = Extract<
+  NonNullable<OpenAI.Responses.Response["output"]>[number],
+  { type: "message" }
+>;
 
 const requestSchema = z.object({
   productId: z.string().uuid(),
@@ -22,6 +26,25 @@ const rewriteSchema = z.object({
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function extractText(output: OpenAI.Responses.Response["output"]) {
+  if (!Array.isArray(output)) return "{}";
+  const message = output.find(
+    (item): item is ResponseMessage => item?.type === "message"
+  );
+  if (!message) return "{}";
+  const textPart = message.content.find(
+    (part) => part.type === "output_text"
+  );
+  if (!textPart || textPart.type !== "output_text") return "{}";
+  if (Array.isArray(textPart.text)) {
+    return textPart.text.join(" ").trim() || "{}";
+  }
+  if (typeof textPart.text === "string") {
+    return textPart.text.trim() || "{}";
+  }
+  return "{}";
+}
 
 async function insertAnalysis(payload: AnalysisInsert) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -118,10 +141,7 @@ Lever nu:
       ],
     });
 
-    const content =
-      response.output?.[0]?.content?.[0]?.type === "output_text"
-        ? response.output[0].content[0].text ?? "{}"
-        : "{}";
+    const content = extractText(response.output);
 
     let parsedResult: {
       short_description: string;
