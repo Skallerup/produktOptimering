@@ -105,6 +105,16 @@ export async function POST(request: Request) {
       word_count: product.wordCount,
       raw: product.raw,
       last_crawled_at: new Date().toISOString(),
+      date_created: product.dateCreated
+        ? new Date(product.dateCreated).toISOString()
+        : null,
+      brand: product.brand,
+      tags: product.tags.length > 0 ? product.tags : null,
+      stock_status: product.stockStatus,
+      on_sale: product.onSale,
+      featured: product.featured,
+      category_ids: product.categoryIds.length > 0 ? product.categoryIds : null,
+      category_names: product.categories.length > 0 ? product.categories : null,
     }));
 
     const savedProducts = await restUpsert<ProductRow>(

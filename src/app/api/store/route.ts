@@ -9,6 +9,18 @@ const querySchema = z
   .object({
     storeId: z.string().uuid().optional(),
     storeUrl: z.string().min(3).optional(),
+    brand: z.string().optional(),
+    category: z.string().optional(),
+    onSale: z
+      .string()
+      .optional()
+      .transform((val) => (val === "true" ? true : val === "false" ? false : undefined)),
+    featured: z
+      .string()
+      .optional()
+      .transform((val) => (val === "true" ? true : val === "false" ? false : undefined)),
+    sortBy: z.enum(["name", "date_created", "price"]).default("name"),
+    sortOrder: z.enum(["asc", "desc"]).default("asc"),
   })
   .refine(
     (value) => value.storeId || value.storeUrl,
@@ -27,6 +39,12 @@ export async function GET(request: Request) {
     const parsed = querySchema.safeParse({
       storeId: url.searchParams.get("storeId") ?? undefined,
       storeUrl: url.searchParams.get("storeUrl") ?? undefined,
+      brand: url.searchParams.get("brand") ?? undefined,
+      category: url.searchParams.get("category") ?? undefined,
+      onSale: url.searchParams.get("onSale") ?? undefined,
+      featured: url.searchParams.get("featured") ?? undefined,
+      sortBy: url.searchParams.get("sortBy") ?? "name",
+      sortOrder: url.searchParams.get("sortOrder") ?? "asc",
     });
 
     if (!parsed.success) {
@@ -85,12 +103,40 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data: products, error: productsError } = await supabase
+    let query = supabase
       .from("products")
       .select("*")
-      .eq("store_id", store.id)
-      .order("name", { ascending: true })
-      .returns<ProductRow[]>();
+      .eq("store_id", store.id);
+
+    // Tilføj filtre
+    if (parsed.data.brand) {
+      query = query.eq("brand", parsed.data.brand);
+    }
+    if (parsed.data.category) {
+      // Søg efter kategori i category_names array
+      query = query.contains("category_names", [parsed.data.category]);
+    }
+    if (parsed.data.onSale !== undefined) {
+      query = query.eq("on_sale", parsed.data.onSale);
+    }
+    if (parsed.data.featured !== undefined) {
+      query = query.eq("featured", parsed.data.featured);
+    }
+
+    // Sortering
+    const sortBy = parsed.data.sortBy ?? "name";
+    const ascending = parsed.data.sortOrder !== "desc";
+    
+    // Håndter særlige sorteringsfelter
+    if (sortBy === "price") {
+      // For price skal vi sortere efter numerisk værdi, men vi gemmer det som string
+      // Så vi sorterer alfabetisk (hvilket fungerer for samme format)
+      query = query.order("price", { ascending });
+    } else {
+      query = query.order(sortBy, { ascending });
+    }
+
+    const { data: products, error: productsError } = await query.returns<ProductRow[]>();
 
     if (productsError) {
       throw new Error(productsError.message);

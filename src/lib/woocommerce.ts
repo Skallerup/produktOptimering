@@ -23,7 +23,14 @@ type WooProduct = {
   sku?: string | null;
   images?: WooImage[];
   prices?: WooPrices;
-  categories?: { name: string }[];
+  categories?: { id: number; name: string; slug: string }[];
+  tags?: { id: number; name: string; slug: string }[];
+  attributes?: { id: number; name: string; options: string[] }[];
+  date_created?: string;
+  date_modified?: string;
+  stock_status?: string;
+  on_sale?: boolean;
+  featured?: boolean;
 };
 
 export type ProductSnapshot = {
@@ -36,9 +43,16 @@ export type ProductSnapshot = {
   price: string | null;
   image: string | null;
   categories: string[];
+  categoryIds: number[];
   metaTitle: string | null;
   metaDescription: string | null;
   wordCount: number;
+  dateCreated: string | null;
+  brand: string | null;
+  tags: string[];
+  stockStatus: string | null;
+  onSale: boolean;
+  featured: boolean;
   raw: WooProduct;
 };
 
@@ -94,6 +108,16 @@ export async function crawlProducts(baseUrl: string) {
 
   const enriched = await asyncPool(5, products, async (product) => {
     const { metaTitle, metaDescription } = await fetchMeta(product.permalink);
+    
+    // Find brand fra attributes (søg efter "brand", "mærke", "pa_brand" eller lignende)
+    const brandAttr = product.attributes?.find(
+      (attr) =>
+        attr.name.toLowerCase().includes("brand") ||
+        attr.name.toLowerCase().includes("mærke") ||
+        attr.name.toLowerCase() === "pa_brand"
+    );
+    const brand = brandAttr?.options?.[0] ?? null;
+    
     return {
       remoteId: String(product.id),
       name: product.name,
@@ -104,9 +128,16 @@ export async function crawlProducts(baseUrl: string) {
       price: product.prices?.price ?? null,
       image: product.images?.[0]?.src ?? null,
       categories: product.categories?.map((cat) => cat.name) ?? [],
+      categoryIds: product.categories?.map((cat) => cat.id) ?? [],
       metaTitle,
       metaDescription,
       wordCount: countWords(stripHtml(product.description)),
+      dateCreated: product.date_created ?? null,
+      brand,
+      tags: product.tags?.map((t) => t.name) ?? [],
+      stockStatus: product.stock_status ?? null,
+      onSale: product.on_sale ?? false,
+      featured: product.featured ?? false,
       raw: product,
     } satisfies ProductSnapshot;
   });

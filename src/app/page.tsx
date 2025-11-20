@@ -22,6 +22,13 @@ type Product = {
   meta_title: string | null;
   meta_description: string | null;
   word_count: number | null;
+  date_created: string | null;
+  brand: string | null;
+  tags: string[] | null;
+  stock_status: string | null;
+  on_sale: boolean | null;
+  featured: boolean | null;
+  category_names: string[] | null;
 };
 
 type AnalysisSection = {
@@ -190,6 +197,14 @@ export default function Home() {
   >({});
   const [optimizing, setOptimizing] = useState<Record<string, boolean>>({});
   const [longDepth, setLongDepth] = useState(3);
+  const [filters, setFilters] = useState({
+    brand: "",
+    category: "",
+    onSale: false,
+    featured: false,
+    sortBy: "name" as "name" | "date_created" | "price",
+    sortOrder: "asc" as "asc" | "desc",
+  });
   const createMarkup = (value: string) => ({
     __html: value || "",
   });
@@ -280,6 +295,31 @@ export default function Home() {
     }
   }, []);
 
+  // Re-fetch produkter når filtre ændres
+  useEffect(() => {
+    if (!storeId) return;
+
+    const queryParams = new URLSearchParams({
+      storeId,
+      ...(filters.brand && { brand: filters.brand }),
+      ...(filters.category && { category: filters.category }),
+      ...(filters.onSale && { onSale: "true" }),
+      ...(filters.featured && { featured: "true" }),
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+    });
+
+    fetch(`/api/store?${queryParams.toString()}`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        setProducts(data.products ?? []);
+      })
+      .catch(() => {
+        // Ignorer fejl ved filter-ændring
+      });
+  }, [storeId, filters]);
+
   const persistSession = (payload: { storeId: string; storeUrl: string }) => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -340,6 +380,15 @@ export default function Home() {
       setStoreUrl(data.storeUrl ?? storeUrl);
       setProducts(data.products ?? []);
       setLimit(Math.min(5, data.products.length));
+      // Reset filtre ved ny scan
+      setFilters({
+        brand: "",
+        category: "",
+        onSale: false,
+        featured: false,
+        sortBy: "name",
+        sortOrder: "asc",
+      });
       persistSession({
         storeId: data.storeId,
         storeUrl: data.storeUrl ?? storeUrl,
@@ -577,6 +626,138 @@ export default function Home() {
                   </div>
                   <div className="text-right text-sm text-slate-400">
                     {selectedProducts.length} udvalgt
+                  </div>
+                </div>
+
+                {/* Filtrering */}
+                <div className="mt-5 space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <p className="text-sm font-semibold text-white">Filtrer & sorter</p>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Brand filter */}
+                    {(() => {
+                      const uniqueBrands = Array.from(
+                        new Set(products.map((p) => p.brand).filter(Boolean))
+                      ).sort();
+                      if (uniqueBrands.length === 0) return null;
+                      return (
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">
+                            Brand
+                          </label>
+                          <select
+                            value={filters.brand || ""}
+                            onChange={(e) =>
+                              setFilters((prev) => ({ ...prev, brand: e.target.value }))
+                            }
+                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                          >
+                            <option value="">Alle brands</option>
+                            {uniqueBrands.map((brand) => (
+                              <option key={brand} value={brand || ""}>
+                                {brand}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Category filter */}
+                    {(() => {
+                      const allCategories = new Set<string>();
+                      products.forEach((p) => {
+                        p.category_names?.forEach((cat) => allCategories.add(cat));
+                      });
+                      const uniqueCategories = Array.from(allCategories).sort();
+                      if (uniqueCategories.length === 0) return null;
+                      return (
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">
+                            Kategori
+                          </label>
+                          <select
+                            value={filters.category}
+                            onChange={(e) =>
+                              setFilters((prev) => ({ ...prev, category: e.target.value }))
+                            }
+                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                          >
+                            <option value="">Alle kategorier</option>
+                            {uniqueCategories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={filters.onSale}
+                        onChange={(e) =>
+                          setFilters((prev) => ({ ...prev, onSale: e.target.checked }))
+                        }
+                        className="size-4 accent-emerald-400"
+                      />
+                      På tilbud
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={filters.featured}
+                        onChange={(e) =>
+                          setFilters((prev) => ({ ...prev, featured: e.target.checked }))
+                        }
+                        className="size-4 accent-emerald-400"
+                      />
+                      Featured
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Sorter efter
+                      </label>
+                      <select
+                        value={filters.sortBy}
+                        onChange={(e) =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            sortBy: e.target.value as "name" | "date_created" | "price",
+                          }))
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                      >
+                        <option value="name">Navn</option>
+                        <option value="date_created">Oprettelsesdato</option>
+                        <option value="price">Pris</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        Rækkefølge
+                      </label>
+                      <select
+                        value={filters.sortOrder}
+                        onChange={(e) =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            sortOrder: e.target.value as "asc" | "desc",
+                          }))
+                        }
+                        className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                      >
+                        <option value="asc">Stigende</option>
+                        <option value="desc">Faldende</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

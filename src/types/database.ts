@@ -46,6 +46,14 @@ export type Database = {
           word_count: number | null;
           raw: Json | null;
           last_crawled_at: string;
+          date_created: string | null;
+          brand: string | null;
+          tags: string[] | null;
+          stock_status: string | null;
+          on_sale: boolean | null;
+          featured: boolean | null;
+          category_ids: number[] | null;
+          category_names: string[] | null;
         };
         Insert: {
           id?: string;
@@ -63,6 +71,14 @@ export type Database = {
           word_count?: number | null;
           raw?: Json | null;
           last_crawled_at?: string;
+          date_created?: string | null;
+          brand?: string | null;
+          tags?: string[] | null;
+          stock_status?: string | null;
+          on_sale?: boolean | null;
+          featured?: boolean | null;
+          category_ids?: number[] | null;
+          category_names?: string[] | null;
         };
         Update: {
           id?: string;
@@ -80,6 +96,14 @@ export type Database = {
           word_count?: number | null;
           raw?: Json | null;
           last_crawled_at?: string;
+          date_created?: string | null;
+          brand?: string | null;
+          tags?: string[] | null;
+          stock_status?: string | null;
+          on_sale?: boolean | null;
+          featured?: boolean | null;
+          category_ids?: number[] | null;
+          category_names?: string[] | null;
         };
       };
       analyses: {
