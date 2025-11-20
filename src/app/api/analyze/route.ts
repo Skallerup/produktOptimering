@@ -40,31 +40,35 @@ const requestSchema = z.object({
 });
 
 const responseSchema = {
-  name: "ProductOptimization",
-  schema: {
-    type: "object",
-    properties: {
-      summary: { type: "string" },
-      missing_information_questions: {
-        type: "array",
-        items: { type: "string" },
+  type: "json_schema",
+  json_schema: {
+    name: "ProductOptimization",
+    schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        missing_information_questions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        optimization_suggestions: {
+          type: "array",
+          items: { type: "string" },
+        },
+        seo_notes: {
+          type: "array",
+          items: { type: "string" },
+        },
       },
-      optimization_suggestions: {
-        type: "array",
-        items: { type: "string" },
-      },
-      seo_notes: {
-        type: "array",
-        items: { type: "string" },
-      },
+      required: [
+        "summary",
+        "missing_information_questions",
+        "optimization_suggestions",
+        "seo_notes",
+      ],
+      additionalProperties: false,
     },
-    required: [
-      "summary",
-      "missing_information_questions",
-      "optimization_suggestions",
-      "seo_notes",
-    ],
-    additionalProperties: false,
+    strict: true,
   },
 } as const;
 
@@ -134,13 +138,7 @@ Opgave:
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
         text: {
-          format: {
-            type: "json_schema",
-            json_schema: {
-              name: responseSchema.name,
-              schema: responseSchema.schema,
-            },
-          },
+          format: responseSchema,
         },
         input: [
           {
