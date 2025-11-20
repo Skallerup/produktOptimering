@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         .from("stores")
         .select("*")
         .eq("base_url", normalizedUrl)
-        .maybeSingle();
+        .maybeSingle<StoreRow>();
 
       if (storeByUrlError) {
         throw new Error(storeByUrlError.message);
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
       .from("stores")
       .select("*")
       .eq("id", storeId)
-      .maybeSingle();
+      .maybeSingle<StoreRow>();
 
     if (storeError) {
       throw new Error(storeError.message);
@@ -84,7 +84,8 @@ export async function GET(request: Request) {
       .from("products")
       .select("*")
       .eq("store_id", store.id)
-      .order("name", { ascending: true });
+      .order("name", { ascending: true })
+      .returns<ProductRow[]>();
 
     if (productsError) {
       throw new Error(productsError.message);
