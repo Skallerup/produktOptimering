@@ -23,10 +23,16 @@ type Product = {
   word_count: number | null;
 };
 
-type Analysis = {
-  summary: string;
+type AnalysisSection = {
   missing_information_questions: string[];
   optimization_suggestions: string[];
+};
+
+type Analysis = {
+  summary: string;
+  short_text: AnalysisSection;
+  long_text: AnalysisSection;
+  customer_questions: string[];
   seo_notes: string[];
 };
 
@@ -673,38 +679,64 @@ export default function Home() {
                         </div>
 
                         {analysis && (
-                          <div className="mt-4 space-y-4 text-sm text-slate-200">
+                          <div className="mt-4 space-y-5 text-sm text-slate-200">
                             <div>
                               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
                                 Resume
                               </p>
                               <p className="mt-1 text-base text-white">
-                                {analysis.summary ?? "Ingen resume tilgængelig."}
+                                {analysis.summary}
                               </p>
                             </div>
 
-                            <div>
-                              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                Manglende information
-                              </p>
-                              <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {(analysis.missing_information_questions ?? []).map(
-                                  (question, index) => (
-                                    <li key={index}>{question}</li>
-                                  )
-                                )}
-                              </ul>
-                            </div>
+                            {[
+                              { title: "Kort tekst", section: analysis.short_text },
+                              { title: "Lang tekst", section: analysis.long_text },
+                            ].map(({ title, section }) => (
+                              <div
+                                key={title}
+                                className="rounded-2xl border border-white/5 bg-slate-900/20 p-3"
+                              >
+                                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                                  {title} · Manglende info
+                                </p>
+                                <ul className="mt-1 list-disc space-y-1 pl-4">
+                                  {section.missing_information_questions.length ? (
+                                    section.missing_information_questions.map(
+                                      (item, index) => <li key={index}>{item}</li>
+                                    )
+                                  ) : (
+                                    <li>Ingen huller registreret.</li>
+                                  )}
+                                </ul>
+                                <p className="mt-4 text-xs uppercase tracking-[0.3em] text-slate-400">
+                                  {title} · Optimeringsforslag
+                                </p>
+                                <ul className="mt-1 list-disc space-y-1 pl-4">
+                                  {section.optimization_suggestions.length ? (
+                                    section.optimization_suggestions.map(
+                                      (item, index) => <li key={index}>{item}</li>
+                                    )
+                                  ) : (
+                                    <li>Ingen forslag i denne sektion.</li>
+                                  )}
+                                </ul>
+                              </div>
+                            ))}
 
                             <div>
                               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                                Optimeringsforslag
+                                Kundespørgsmål / potentiale
                               </p>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {(analysis.optimization_suggestions ?? []).map(
-                                  (suggestion, index) => (
-                                    <li key={index}>{suggestion}</li>
+                                {analysis.customer_questions.length ? (
+                                  analysis.customer_questions.map(
+                                    (question, index) => (
+                                      <li key={index}>{question}</li>
+                                    )
                                   )
+                                ) : (
+                                  <li>Ingen åbne spørgsmål.</li>
                                 )}
                               </ul>
                             </div>
@@ -714,9 +746,13 @@ export default function Home() {
                                 SEO noter
                               </p>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {(analysis.seo_notes ?? []).map((note, index) => (
-                                  <li key={index}>{note}</li>
-                                ))}
+                                {analysis.seo_notes.length ? (
+                                  analysis.seo_notes.map((note, index) => (
+                                    <li key={index}>{note}</li>
+                                  ))
+                                ) : (
+                                  <li>Ingen noter i denne omgang.</li>
+                                )}
                               </ul>
                             </div>
                           </div>

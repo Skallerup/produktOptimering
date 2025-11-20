@@ -73,10 +73,16 @@ const requestSchema = z.object({
   instructions: z.string().optional(),
 });
 
-const analysisSchema = z.object({
-  summary: z.string().min(1),
+const textSectionSchema = z.object({
   missing_information_questions: z.array(z.string()),
   optimization_suggestions: z.array(z.string()),
+});
+
+const analysisSchema = z.object({
+  summary: z.string().min(1),
+  short_text: textSectionSchema,
+  long_text: textSectionSchema,
+  customer_questions: z.array(z.string()),
   seo_notes: z.array(z.string()),
 });
 
@@ -134,6 +140,20 @@ export async function POST(request: Request) {
       ]
         .filter(Boolean)
         .join("\n\n");
+      const formatRequirements = `Returnér JSON med præcis denne struktur:
+{
+  "summary": string,
+  "short_text": {
+    "missing_information_questions": string[],
+    "optimization_suggestions": string[]
+  },
+  "long_text": {
+    "missing_information_questions": string[],
+    "optimization_suggestions": string[]
+  },
+  "customer_questions": string[],
+  "seo_notes": string[]
+}`;
       const userPrompt = `
 Produktnavn: ${product.name}
 Kort beskrivelse: ${product.short_description ?? "N/A"}
@@ -145,9 +165,12 @@ Meta Description: ${product.meta_description ?? "N/A"}
 Ord antal: ${product.word_count ?? 0}
 
 Opgave:
-1. Hvor mangler vi vigtig information? Stil konkrete spørgsmål.
-2. Hvad bør forbedres for at øge konvertering?
-3. Giv SEO-noter (tone of voice, struktur, metadata).
+1. Gennemgå kort og lang tekst separat og giv optimeringsforslag til hver.
+2. Hvor mangler vi vigtig information? Stil konkrete spørgsmål.
+3. Opfør dig som en potentiel kunde og efterspørg funktioner/skader/forebyggelse der ikke beskrives.
+4. Giv SEO-noter (tone of voice, struktur, metadata).
+
+${formatRequirements}
 `;
 
       const response = await client.responses.create({
@@ -168,10 +191,17 @@ Opgave:
 
       const content = extractText(response.output);
 
-      let parsedResult: Json = {
+      let parsedResult: z.infer<typeof analysisSchema> = {
         summary: "Modellen returnerede ikke gyldigt JSON.",
-        missing_information_questions: [],
-        optimization_suggestions: [],
+        short_text: {
+          missing_information_questions: [],
+          optimization_suggestions: [],
+        },
+        long_text: {
+          missing_information_questions: [],
+          optimization_suggestions: [],
+        },
+        customer_questions: [],
         seo_notes: [],
       };
       try {
