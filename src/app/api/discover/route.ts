@@ -84,6 +84,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       storeId: store.id,
+      storeUrl: store.base_url,
       products: savedProducts,
     });
   } catch (error) {

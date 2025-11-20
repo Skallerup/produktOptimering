@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -30,6 +30,8 @@ type Analysis = {
   seo_notes: string[];
 };
 
+const STORAGE_KEY = "produktoptimering:lastStore";
+
 export default function Home() {
   const [storeUrl, setStoreUrl] = useState("");
   const [openAiKey, setOpenAiKey] = useState("");
@@ -44,6 +46,72 @@ export default function Home() {
   const [progress, setProgress] = useState<
     Record<string, "idle" | "running" | "done">
   >({});
+  const [restoreStatus, setRestoreStatus] = useState<
+    "idle" | "loading" | "error" | "success"
+  >("idle");
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved) as {
+        storeId: string;
+        storeUrl?: string;
+      };
+      if (!parsed.storeId) return;
+
+      setRestoreStatus("loading");
+      if (parsed.storeUrl) {
+        setStoreUrl(parsed.storeUrl);
+      }
+
+      fetch(`/api/store?storeId=${parsed.storeId}`)
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error("Kunne ikke hente tidligere scan.");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          setStoreId(data.store.id);
+          setStoreUrl(data.store.base_url ?? "");
+          setProducts(data.products ?? []);
+          setLimit(Math.min(5, data.products?.length ?? 5));
+          setRestoreStatus("success");
+          setRestoreMessage("Tidligere scan er indlæst.");
+        })
+        .catch(() => {
+          setRestoreStatus("error");
+          setRestoreMessage("Kunne ikke indlæse tidligere scan.");
+          window.localStorage.removeItem(STORAGE_KEY);
+        });
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  const persistSession = (payload: { storeId: string; storeUrl: string }) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  };
+
+  const clearSession = () => {
+    setStoreId(null);
+    setProducts([]);
+    setSelectedIds([]);
+    setAnalyses({});
+    setProgress({});
+    setStoreUrl("");
+    setRestoreMessage(null);
+    setRestoreStatus("idle");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+  };
 
   const selectedProducts = useMemo(() => {
     if (selectedIds.length) {
@@ -79,8 +147,13 @@ export default function Home() {
       }
 
       setStoreId(data.storeId);
+      setStoreUrl(data.storeUrl ?? storeUrl);
       setProducts(data.products ?? []);
       setLimit(Math.min(5, data.products.length));
+      persistSession({
+        storeId: data.storeId,
+        storeUrl: data.storeUrl ?? storeUrl,
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Uventet fejl ved scanning."
@@ -226,11 +299,29 @@ export default function Home() {
                 </button>
               </form>
 
-              {products.length > 0 && (
-                <p className="mt-3 text-sm text-slate-400">
-                  {products.length} produkter gemt i Supabase.
-                </p>
-              )}
+              <div className="mt-3 space-y-2 text-sm text-slate-400">
+                {products.length > 0 && (
+                  <p>{products.length} produkter gemt i Supabase.</p>
+                )}
+                {restoreMessage && (
+                  <p
+                    className={
+                      restoreStatus === "error"
+                        ? "text-rose-300"
+                        : "text-emerald-300"
+                    }
+                  >
+                    {restoreMessage}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={clearSession}
+                className="mt-4 text-sm text-slate-400 underline underline-offset-4 hover:text-white"
+              >
+                Nulstil gemt scan
+              </button>
             </div>
 
             {products.length > 0 && (
