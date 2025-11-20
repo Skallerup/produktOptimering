@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getServiceClient } from "@/lib/supabase";
 import { normalizeStoreUrl } from "@/lib/utils";
+import type { Database } from "@/types/database";
 
 const querySchema = z
   .object({
@@ -13,6 +14,9 @@ const querySchema = z
     (value) => value.storeId || value.storeUrl,
     "storeId eller storeUrl er påkrævet"
   );
+
+type StoreRow = Database["public"]["Tables"]["stores"]["Row"];
+type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 export const runtime = "nodejs";
 
