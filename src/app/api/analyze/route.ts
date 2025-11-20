@@ -152,7 +152,7 @@ Opgave:
       };
       const { data: savedAnalysis, error: analysisError } = await supabase
         .from("analyses")
-        .insert(insertPayload)
+        .insert<AnalysisInsert>(insertPayload)
         .select()
         .single()
         .returns<AnalysisRow>();
