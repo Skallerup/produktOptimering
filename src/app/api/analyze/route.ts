@@ -7,6 +7,7 @@ import type { Database, Json } from "@/types/database";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type AnalysisRow = Database["public"]["Tables"]["analyses"]["Row"];
+type AnalysisInsert = Database["public"]["Tables"]["analyses"]["Insert"];
 type ResponseOutputItem = {
   type?: string;
   content?: Array<{ type?: string; text?: string[] | string }>;
@@ -145,13 +146,15 @@ Opgave:
         console.error("Kunne ikke parse OpenAI output", parseError);
       }
 
+      const insertPayload: AnalysisInsert = {
+        product_id: product.id,
+        model: response.model ?? "gpt-4.1-mini",
+        analysis: parsedResult as Json,
+      };
+
       const { data: savedAnalysis, error: analysisError } = await supabase
         .from("analyses")
-        .insert({
-          product_id: product.id,
-          model: response.model ?? "gpt-4.1-mini",
-          analysis: parsedResult as Json,
-        })
+        .insert(insertPayload)
         .select()
         .single()
         .returns<AnalysisRow>();
