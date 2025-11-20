@@ -96,11 +96,13 @@ export async function POST(request: Request) {
     const client = new OpenAI({ apiKey: openAiKey });
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "ProductRewrite",
-          schema: rewriteSchema,
+      text: {
+        format: {
+          type: "json_schema",
+          json_schema: {
+            name: "ProductRewrite",
+            schema: rewriteSchema,
+          },
         },
       },
       input: [
