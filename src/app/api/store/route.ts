@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getServiceClient } from "@/lib/supabase";
 import { normalizeStoreUrl } from "@/lib/utils";
 import type { Database } from "@/types/database";
-import type { Database } from "@/types/database";
 
 const querySchema = z
   .object({
