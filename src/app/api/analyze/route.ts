@@ -38,6 +38,35 @@ const requestSchema = z.object({
   openAiKey: z.string().min(40),
 });
 
+const responseSchema = {
+  name: "ProductOptimization",
+  schema: {
+    type: "object",
+    properties: {
+      summary: { type: "string" },
+      missing_information_questions: {
+        type: "array",
+        items: { type: "string" },
+      },
+      optimization_suggestions: {
+        type: "array",
+        items: { type: "string" },
+      },
+      seo_notes: {
+        type: "array",
+        items: { type: "string" },
+      },
+    },
+    required: [
+      "summary",
+      "missing_information_questions",
+      "optimization_suggestions",
+      "seo_notes",
+    ],
+    additionalProperties: false,
+  },
+} as const;
+
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -103,6 +132,10 @@ Opgave:
 
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
+        response_format: responseSchema as unknown as {
+          type: "json_schema";
+          json_schema: typeof responseSchema;
+        },
         input: [
           {
             role: "system",
