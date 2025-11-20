@@ -3,7 +3,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 
 import { getServiceClient } from "@/lib/supabase";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 type ResponseOutputItem = {
@@ -135,10 +135,11 @@ Opgave:
         .insert({
           product_id: product.id,
           model: response.model ?? "gpt-4.1-mini",
-          analysis: parsedResult,
+          analysis: parsedResult as Json,
         })
         .select()
-        .single();
+        .single()
+        .returns<AnalysisRow>();
 
       if (analysisError || !savedAnalysis) {
         throw new Error(
