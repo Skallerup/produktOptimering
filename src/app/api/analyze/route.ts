@@ -39,10 +39,11 @@ const requestSchema = z.object({
   openAiKey: z.string().min(40),
 });
 
-const responseSchema = {
+const responseFormat: OpenAI.ResponseCreateParams["text"]["format"] = {
   type: "json_schema",
   json_schema: {
     name: "ProductOptimization",
+    strict: true,
     schema: {
       type: "object",
       properties: {
@@ -68,9 +69,8 @@ const responseSchema = {
       ],
       additionalProperties: false,
     },
-    strict: true,
   },
-} as const;
+};
 
 export const runtime = "nodejs";
 
@@ -138,7 +138,7 @@ Opgave:
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
         text: {
-          format: responseSchema,
+          format: responseFormat,
         },
         input: [
           {
