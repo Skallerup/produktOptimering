@@ -43,6 +43,14 @@ type OptimizationResult = {
   notes?: string[];
 };
 
+type ServerAnalysesMap = Record<
+  string,
+  {
+    analysis?: Analysis;
+    rewrite?: OptimizationResult | { result?: OptimizationResult };
+  }
+>;
+
 const STORAGE_KEY = "produktoptimering:lastStore";
 const INSTRUCTION_STORAGE_KEY = "produktoptimering:instructions";
 
@@ -226,6 +234,36 @@ export default function Home() {
         })
         .then((data) => {
           setStoreId(data.store.id);
+          const analysesFromServer: ServerAnalysesMap = data.analyses ?? {};
+
+          const restoredAnalyses: Record<string, Analysis> = {};
+          const restoredOptimizations: Record<string, OptimizationResult> = {};
+          const restoredProgress: Record<string, "idle" | "running" | "done"> = {};
+
+          for (const product of data.products ?? []) {
+            const entry = analysesFromServer[product.id];
+            if (entry?.analysis) {
+              restoredAnalyses[product.id] = entry.analysis as Analysis;
+              restoredProgress[product.id] = "done";
+            } else {
+              restoredProgress[product.id] = "idle";
+            }
+
+            const rewritePayload =
+              entry?.rewrite && typeof entry.rewrite === "object"
+                ? ("result" in entry.rewrite
+                    ? (entry.rewrite as { result?: OptimizationResult }).result
+                    : (entry.rewrite as OptimizationResult))
+                : undefined;
+
+            if (rewritePayload) {
+              restoredOptimizations[product.id] = rewritePayload;
+            }
+          }
+
+          setAnalyses(restoredAnalyses);
+          setOptimizations((prev) => ({ ...restoredOptimizations, ...prev }));
+          setProgress((prev) => ({ ...prev, ...restoredProgress }));
           setStoreUrl(data.store.base_url ?? "");
           setProducts(data.products ?? []);
           setLimit(Math.min(5, data.products?.length ?? 5));
@@ -280,6 +318,7 @@ export default function Home() {
     setProducts([]);
     setStoreId(null);
     setAnalyses({});
+    setOptimizations({});
     setSelectedIds([]);
     setProgress({});
 

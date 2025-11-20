@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getServiceClient } from "@/lib/supabase";
 import { normalizeStoreUrl } from "@/lib/utils";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 
 const querySchema = z
   .object({
@@ -17,6 +17,7 @@ const querySchema = z
 
 type StoreRow = Database["public"]["Tables"]["stores"]["Row"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
+type AnalysisRow = Database["public"]["Tables"]["analyses"]["Row"];
 
 export const runtime = "nodejs";
 
@@ -95,9 +96,49 @@ export async function GET(request: Request) {
       throw new Error(productsError.message);
     }
 
+    const productIds = products.map((product) => product.id);
+    let analysesByProduct:
+      | Record<
+          string,
+          {
+            analysis?: Json;
+            rewrite?: Json;
+          }
+        >
+      | undefined;
+
+    if (productIds.length) {
+      const { data: analysesRows, error: analysesError } = await supabase
+        .from("analyses")
+        .select("*")
+        .in("product_id", productIds)
+        .order("created_at", { ascending: false })
+        .returns<AnalysisRow[]>();
+
+      if (analysesError) {
+        throw new Error(analysesError.message);
+      }
+
+      analysesByProduct = {};
+      for (const row of analysesRows ?? []) {
+        const bucket =
+          analysesByProduct[row.product_id] ??
+          (analysesByProduct[row.product_id] = {});
+        const payload = row.analysis;
+        const isRewrite =
+          payload && typeof payload === "object" && "kind" in payload;
+        if (isRewrite && !bucket.rewrite) {
+          bucket.rewrite = payload;
+        } else if (!isRewrite && !bucket.analysis) {
+          bucket.analysis = payload;
+        }
+      }
+    }
+
     return NextResponse.json({
       store,
       products,
+      analyses: analysesByProduct ?? {},
     });
   } catch (error) {
     console.error(error);
