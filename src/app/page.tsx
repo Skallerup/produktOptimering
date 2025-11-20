@@ -416,7 +416,7 @@ export default function Home() {
                                 Resume
                               </p>
                               <p className="mt-1 text-base text-white">
-                                {analysis.summary}
+                                {analysis.summary ?? "Ingen resume tilgængelig."}
                               </p>
                             </div>
 
@@ -425,7 +425,7 @@ export default function Home() {
                                 Manglende information
                               </p>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {analysis.missing_information_questions.map(
+                                {(analysis.missing_information_questions ?? []).map(
                                   (question, index) => (
                                     <li key={index}>{question}</li>
                                   )
@@ -438,7 +438,7 @@ export default function Home() {
                                 Optimeringsforslag
                               </p>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {analysis.optimization_suggestions.map(
+                                {(analysis.optimization_suggestions ?? []).map(
                                   (suggestion, index) => (
                                     <li key={index}>{suggestion}</li>
                                   )
@@ -451,7 +451,7 @@ export default function Home() {
                                 SEO noter
                               </p>
                               <ul className="mt-1 list-disc space-y-1 pl-4">
-                                {analysis.seo_notes.map((note, index) => (
+                                {(analysis.seo_notes ?? []).map((note, index) => (
                                   <li key={index}>{note}</li>
                                 ))}
                               </ul>
