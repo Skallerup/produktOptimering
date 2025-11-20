@@ -17,8 +17,6 @@ const querySchema = z
 
 type StoreRow = Database["public"]["Tables"]["stores"]["Row"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
-
-type StoreRow = Database["public"]["Tables"]["stores"]["Row"];
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 export const runtime = "nodejs";
