@@ -132,9 +132,12 @@ Opgave:
 
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
-        response_format: responseSchema as unknown as {
-          type: "json_schema";
-          json_schema: typeof responseSchema;
+        // Responses API expects the schema under text.format
+        text: {
+          format: {
+            type: "json_schema",
+            json_schema: responseSchema,
+          },
         },
         input: [
           {
