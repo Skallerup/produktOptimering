@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  ExternalLink,
   Loader2,
   RefreshCw,
   ScanLine,
@@ -13,6 +14,7 @@ import {
 
 type Product = {
   id: string;
+  remote_id: string;
   name: string;
   short_description: string | null;
   description: string | null;
@@ -1209,10 +1211,24 @@ export default function Home() {
                           {state === "idle" && (
                             <AlertTriangle className="size-5 text-slate-400" />
                           )}
-                          <div>
-                            <p className="font-semibold text-white">
-                              {product.name}
-                            </p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-white">
+                                {product.name}
+                              </p>
+                              {storeUrl && product.remote_id && (
+                                <a
+                                  href={`${storeUrl}/wp-admin/post.php?post=${product.remote_id}&action=edit`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/40 px-2 py-1 text-xs text-slate-200 transition hover:border-white/30 hover:bg-slate-800/60"
+                                  title="Åbn i WooCommerce admin"
+                                >
+                                  <ExternalLink className="size-3" />
+                                  Admin
+                                </a>
+                              )}
+                            </div>
                             <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
                               {state === "running"
                                 ? "Analyserer"
