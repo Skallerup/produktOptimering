@@ -61,6 +61,7 @@ type ServerAnalysesMap = Record<
 const STORAGE_KEY = "produktoptimering:lastStore";
 const INSTRUCTION_STORAGE_KEY = "produktoptimering:instructions";
 const LONG_DEPTH_STORAGE_KEY = "produktoptimering:longDepth";
+const OPENAI_KEY_STORAGE_KEY = "produktoptimering:openaiKey";
 
 type InstructionSettings = {
   ignoreSizes: boolean;
@@ -163,7 +164,14 @@ function buildInstructionText(settings: InstructionSettings) {
 
 export default function Home() {
   const [storeUrl, setStoreUrl] = useState("");
-  const [openAiKey, setOpenAiKey] = useState("");
+  const [openAiKey, setOpenAiKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return window.localStorage.getItem(OPENAI_KEY_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -918,7 +926,16 @@ export default function Home() {
                   type="password"
                   placeholder="sk-..."
                   value={openAiKey}
-                  onChange={(event) => setOpenAiKey(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setOpenAiKey(value);
+                    if (typeof window !== "undefined") {
+                      window.localStorage.setItem(
+                        OPENAI_KEY_STORAGE_KEY,
+                        value
+                      );
+                    }
+                  }}
                   className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-base text-white outline-none focus:border-violet-300"
                 />
 
