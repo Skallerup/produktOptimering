@@ -60,6 +60,7 @@ type ServerAnalysesMap = Record<
 
 const STORAGE_KEY = "produktoptimering:lastStore";
 const INSTRUCTION_STORAGE_KEY = "produktoptimering:instructions";
+const LONG_DEPTH_STORAGE_KEY = "produktoptimering:longDepth";
 
 type InstructionSettings = {
   ignoreSizes: boolean;
