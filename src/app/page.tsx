@@ -65,6 +65,7 @@ const OPENAI_KEY_STORAGE_KEY = "produktoptimering:openaiKey";
 const SHORT_TEXT_INSTRUCTION_STORAGE_KEY =
   "produktoptimering:shortInstruction";
 const LONG_TEXT_INSTRUCTION_STORAGE_KEY = "produktoptimering:longInstruction";
+const CUSTOM_REWRITE_STORAGE_KEY = "produktoptimering:customRewrites";
 
 const DEFAULT_SHORT_TEXT_INSTRUCTION = [
   "Start med en kort hook-sætning (max 1-2 linjer) i HTML.",
@@ -252,6 +253,17 @@ export default function Home() {
       return DEFAULT_LONG_TEXT_INSTRUCTION;
     }
   });
+  const [customRewrites, setCustomRewrites] = useState<
+    Record<string, { short: string; long: string }>
+  >(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const stored = window.localStorage.getItem(CUSTOM_REWRITE_STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as Record<string, { short: string; long: string }>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [filters, setFilters] = useState({
     brand: "",
     category: "",
@@ -263,6 +275,56 @@ export default function Home() {
   const createMarkup = (value: string) => ({
     __html: value || "",
   });
+  const getRewriteValue = (productId: string, field: "short" | "long") => {
+    const customValue = customRewrites[productId]?.[field];
+    if (typeof customValue === "string") {
+      return customValue;
+    }
+    const rewrite = optimizations[productId];
+    if (!rewrite) return "";
+    return field === "short"
+      ? rewrite.short_description ?? ""
+      : rewrite.description ?? "";
+  };
+  const persistCustomRewrites = (
+    payload: Record<string, { short: string; long: string }>
+  ) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      CUSTOM_REWRITE_STORAGE_KEY,
+      JSON.stringify(payload)
+    );
+  };
+  const updateCustomRewrite = (
+    productId: string,
+    field: "short" | "long",
+    value: string,
+    fallback?: { short?: string; long?: string }
+  ) => {
+    setCustomRewrites((prev) => {
+      const existing = prev[productId] ?? {
+        short: fallback?.short ?? "",
+        long: fallback?.long ?? "",
+      };
+      const nextValue = {
+        ...existing,
+        [field]: value,
+      };
+      const next = { ...prev, [productId]: nextValue };
+      persistCustomRewrites(next);
+      return next;
+    });
+  };
+  const setCustomRewriteValue = (
+    productId: string,
+    values: { short: string; long: string }
+  ) => {
+    setCustomRewrites((prev) => {
+      const next = { ...prev, [productId]: values };
+      persistCustomRewrites(next);
+      return next;
+    });
+  };
   const renderRankedList = (items: string[], emptyLabel: string) => {
     if (!items.length) {
       return <li>{emptyLabel}</li>;
@@ -375,6 +437,28 @@ export default function Home() {
       });
   }, [storeId, filters]);
 
+  useEffect(() => {
+    setCustomRewrites((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      Object.entries(optimizations).forEach(([productId, rewrite]) => {
+        if (!rewrite) return;
+        if (!next[productId]) {
+          next[productId] = {
+            short: rewrite.short_description ?? "",
+            long: rewrite.description ?? "",
+          };
+          changed = true;
+        }
+      });
+      if (changed) {
+        persistCustomRewrites(next);
+        return next;
+      }
+      return prev;
+    });
+  }, [optimizations]);
+
   const persistSession = (payload: { storeId: string; storeUrl: string }) => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -394,12 +478,14 @@ export default function Home() {
     setLongDepth(5);
     setShortInstruction(DEFAULT_SHORT_TEXT_INSTRUCTION);
     setLongInstruction(DEFAULT_LONG_TEXT_INSTRUCTION);
+    setCustomRewrites({});
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
       window.localStorage.removeItem(LONG_DEPTH_STORAGE_KEY);
       window.localStorage.removeItem(SHORT_TEXT_INSTRUCTION_STORAGE_KEY);
       window.localStorage.removeItem(LONG_TEXT_INSTRUCTION_STORAGE_KEY);
+      window.localStorage.removeItem(CUSTOM_REWRITE_STORAGE_KEY);
     }
   };
 
@@ -502,6 +588,17 @@ export default function Home() {
     ]
       .filter(Boolean)
       .join("\n\n");
+  const handleCustomRewriteInput = (
+    productId: string,
+    field: "short" | "long",
+    value: string
+  ) => {
+    const fallback = {
+      short: optimizations[productId]?.short_description ?? "",
+      long: optimizations[productId]?.description ?? "",
+    };
+    updateCustomRewrite(productId, field, value, fallback);
+  };
 
   const handleAnalyze = async () => {
     if (!storeId) {
@@ -594,10 +691,18 @@ export default function Home() {
         setError(data.error ?? "Kunne ikke optimere teksten.");
         return;
       }
+      if (!data.rewrite) {
+        setError("Ingen tekst blev modtaget fra AI.");
+        return;
+      }
       setOptimizations((prev) => ({
         ...prev,
         [product.id]: data.rewrite,
       }));
+      setCustomRewriteValue(product.id, {
+        short: data.rewrite.short_description ?? "",
+        long: data.rewrite.description ?? "",
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Uventet fejl under optimering."
@@ -1079,6 +1184,16 @@ export default function Home() {
                   {selectedProducts.map((product) => {
                     const state = progress[product.id] ?? "idle";
                     const analysis = analyses[product.id];
+                    const shortRewriteValue = getRewriteValue(
+                      product.id,
+                      "short"
+                    );
+                    const longRewriteValue = getRewriteValue(product.id, "long");
+                    const hasRewrite =
+                      Boolean(optimizations[product.id]) ||
+                      Boolean(customRewrites[product.id]);
+                    const rewriteNotes =
+                      optimizations[product.id]?.notes ?? undefined;
                     return (
                       <article
                         key={product.id}
@@ -1220,65 +1335,78 @@ export default function Home() {
                               )}
                             </button>
 
-                            {optimizations[product.id] && (
-                              <div className="space-y-3 text-sm text-slate-200">
-                                <div>
+                            {hasRewrite && (
+                              <div className="space-y-4 text-sm text-slate-200">
+                                <div className="space-y-2">
                                   <div className="flex items-center justify-between">
                                     <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
                                       Ny kort tekst
                                     </p>
-                                    <CopyButton
-                                      text={
-                                        optimizations[product.id]
-                                          .short_description ?? ""
-                                      }
-                                    />
+                                    <CopyButton text={shortRewriteValue} />
                                   </div>
+                                  <textarea
+                                    rows={3}
+                                    value={shortRewriteValue}
+                                    onChange={(event) =>
+                                      handleCustomRewriteInput(
+                                        product.id,
+                                        "short",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-300"
+                                  />
+                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                                    Preview
+                                  </p>
                                   <div
-                                    className="mt-1 text-white whitespace-pre-wrap"
+                                    className="rounded-xl border border-white/5 bg-slate-900/40 p-3 text-white"
                                     dangerouslySetInnerHTML={createMarkup(
-                                      optimizations[product.id]
-                                        .short_description ?? ""
+                                      shortRewriteValue
                                     )}
                                   />
                                 </div>
-                                <div>
+                                <div className="space-y-2">
                                   <div className="flex items-center justify-between">
                                     <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
                                       Ny lang tekst
                                     </p>
-                                    <CopyButton
-                                      text={
-                                        optimizations[product.id].description ??
-                                        ""
-                                      }
-                                    />
+                                    <CopyButton text={longRewriteValue} />
                                   </div>
+                                  <textarea
+                                    rows={6}
+                                    value={longRewriteValue}
+                                    onChange={(event) =>
+                                      handleCustomRewriteInput(
+                                        product.id,
+                                        "long",
+                                        event.target.value
+                                      )
+                                    }
+                                    className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-300"
+                                  />
+                                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                                    Preview
+                                  </p>
                                   <div
-                                    className="mt-1 text-white whitespace-pre-wrap"
+                                    className="rounded-xl border border-white/5 bg-slate-900/40 p-3 text-white"
                                     dangerouslySetInnerHTML={createMarkup(
-                                      optimizations[product.id].description ?? ""
+                                      longRewriteValue
                                     )}
                                   />
                                 </div>
-                                {optimizations[product.id].notes?.length ? (
+                                {rewriteNotes?.length ? (
                                   <div>
                                     <div className="flex items-center justify-between">
                                       <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
                                         Noter
                                       </p>
-                                      <CopyButton
-                                        text={optimizations[
-                                          product.id
-                                        ].notes!.join("\n")}
-                                      />
+                                      <CopyButton text={rewriteNotes.join("\n")} />
                                     </div>
                                     <ul className="mt-1 list-disc space-y-1 pl-4">
-                                      {optimizations[product.id].notes!.map(
-                                        (note, index) => (
-                                          <li key={index}>{note}</li>
-                                        )
-                                      )}
+                                      {rewriteNotes.map((note, index) => (
+                                        <li key={index}>{note}</li>
+                                      ))}
                                     </ul>
                                   </div>
                                 ) : null}
