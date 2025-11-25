@@ -221,13 +221,14 @@ ${formatRequirements}
         model: response.model ?? "gpt-4.1-mini",
         analysis: parsedResult as Json,
       };
-      await insertAnalysis(insertPayload);
+      const savedRow = await insertAnalysis(insertPayload);
 
       results.push({
         productId: product.id,
         productName: product.name,
         permalink: product.permalink,
         analysis: parsedResult,
+        analysisId: savedRow.id,
       });
     }
 

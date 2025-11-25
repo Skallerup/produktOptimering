@@ -147,8 +147,8 @@ export async function GET(request: Request) {
       | Record<
           string,
           {
-            analysis?: Json;
-            rewrite?: Json;
+            analysis?: { id: string; payload: Json };
+            rewrite?: { id: string; payload: Json };
           }
         >
       | undefined;
@@ -174,9 +174,9 @@ export async function GET(request: Request) {
         const isRewrite =
           payload && typeof payload === "object" && "kind" in payload;
         if (isRewrite && !bucket.rewrite) {
-          bucket.rewrite = payload;
+          bucket.rewrite = { id: row.id, payload };
         } else if (!isRewrite && !bucket.analysis) {
-          bucket.analysis = payload;
+          bucket.analysis = { id: row.id, payload };
         }
       }
     }

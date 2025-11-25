@@ -176,7 +176,7 @@ Lever nu:
       console.error("Kunne ikke parse OpenAI rewrite output", parseError);
     }
 
-    await insertAnalysis({
+    const savedRow = await insertAnalysis({
       product_id: product.id,
       model: response.model ?? "gpt-4.1-mini",
       analysis: {
@@ -185,7 +185,7 @@ Lever nu:
       } as Json,
     });
 
-    return NextResponse.json({ rewrite: parsedResult });
+    return NextResponse.json({ rewrite: parsedResult, analysisId: savedRow.id });
   } catch (error) {
     console.error(error);
     return NextResponse.json(

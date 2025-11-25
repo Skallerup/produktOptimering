@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ScanLine,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 type Product = {
@@ -55,8 +56,18 @@ type OptimizationResult = {
 type ServerAnalysesMap = Record<
   string,
   {
-    analysis?: Analysis;
-    rewrite?: OptimizationResult | { result?: OptimizationResult };
+    analysis?: {
+      id: string;
+      payload: Analysis;
+    };
+    rewrite?: {
+      id: string;
+      payload:
+        | OptimizationResult
+        | {
+            result?: OptimizationResult | null;
+          };
+    };
   }
 >;
 
@@ -266,6 +277,12 @@ export default function Home() {
       return {};
     }
   });
+  const [analysisIds, setAnalysisIds] = useState<Record<string, string>>({});
+  const [rewriteIds, setRewriteIds] = useState<Record<string, string>>({});
+  const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [deleteState, setDeleteState] = useState<
+    Record<string, { analysis?: boolean; rewrite?: boolean }>
+  >({});
   const [filters, setFilters] = useState({
     brand: "",
     category: "",
@@ -327,6 +344,15 @@ export default function Home() {
       return next;
     });
   };
+  const removeCustomRewrite = (productId: string) => {
+    setCustomRewrites((prev) => {
+      if (!prev[productId]) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      persistCustomRewrites(next);
+      return next;
+    });
+  };
   const renderRankedList = (items: string[], emptyLabel: string) => {
     if (!items.length) {
       return <li>{emptyLabel}</li>;
@@ -347,77 +373,98 @@ export default function Home() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
 
-    try {
-      const parsed = JSON.parse(saved) as {
-        storeId: string;
-        storeUrl?: string;
-      };
-      if (!parsed.storeId) return;
+    let aborted = false;
 
-      setRestoreStatus("loading");
-      if (parsed.storeUrl) {
-        setStoreUrl(parsed.storeUrl);
-      }
+    const restoreSession = async () => {
+      try {
+        const parsed = JSON.parse(saved) as {
+          storeId: string;
+          storeUrl?: string;
+        };
+        if (!parsed.storeId) return;
 
-      fetch(`/api/store?storeId=${parsed.storeId}`)
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error("Kunne ikke hente tidligere scan.");
-          }
-          return response.json();
-        })
-        .then((data) => {
-          setStoreId(data.store.id);
-          const analysesFromServer: ServerAnalysesMap = data.analyses ?? {};
+        setRestoreStatus("loading");
+        setIsProductsLoading(true);
+        if (parsed.storeUrl) {
+          setStoreUrl(parsed.storeUrl);
+        }
 
-          const restoredAnalyses: Record<string, Analysis> = {};
-          const restoredOptimizations: Record<string, OptimizationResult> = {};
-          const restoredProgress: Record<string, "idle" | "running" | "done"> = {};
+        const response = await fetch(`/api/store?storeId=${parsed.storeId}`);
+        if (!response.ok) {
+          throw new Error("Kunne ikke hente tidligere scan.");
+        }
+        const data = await response.json();
+        if (aborted) return;
 
-          for (const product of data.products ?? []) {
-            const entry = analysesFromServer[product.id];
-            if (entry?.analysis) {
-              restoredAnalyses[product.id] = entry.analysis as Analysis;
-              restoredProgress[product.id] = "done";
-            } else {
-              restoredProgress[product.id] = "idle";
-            }
+        setStoreId(data.store.id);
+        const analysesFromServer: ServerAnalysesMap = data.analyses ?? {};
 
-            const rewritePayload =
-              entry?.rewrite && typeof entry.rewrite === "object"
-                ? ("result" in entry.rewrite
-                    ? (entry.rewrite as { result?: OptimizationResult }).result
-                    : (entry.rewrite as OptimizationResult))
-                : undefined;
+        const restoredAnalyses: Record<string, Analysis> = {};
+        const restoredOptimizations: Record<string, OptimizationResult> = {};
+        const restoredProgress: Record<string, "idle" | "running" | "done"> = {};
+        const restoredAnalysisIds: Record<string, string> = {};
+        const restoredRewriteIds: Record<string, string> = {};
 
-            if (rewritePayload) {
-              restoredOptimizations[product.id] = rewritePayload;
-            }
+        for (const product of data.products ?? []) {
+          const entry = analysesFromServer[product.id];
+          if (entry?.analysis) {
+            restoredAnalyses[product.id] = entry.analysis.payload;
+            restoredAnalysisIds[product.id] = entry.analysis.id;
+            restoredProgress[product.id] = "done";
+          } else {
+            restoredProgress[product.id] = "idle";
           }
 
-          setAnalyses(restoredAnalyses);
-          setOptimizations((prev) => ({ ...restoredOptimizations, ...prev }));
-          setProgress((prev) => ({ ...prev, ...restoredProgress }));
-          setStoreUrl(data.store.base_url ?? "");
-          setProducts(data.products ?? []);
-          setLimit(Math.min(5, data.products?.length ?? 5));
-          setRestoreStatus("success");
-          setRestoreMessage("Tidligere scan er indlæst.");
-        })
-        .catch(() => {
+          const rewritePayload = entry?.rewrite?.payload;
+          const result =
+            rewritePayload && typeof rewritePayload === "object" && "result" in rewritePayload
+              ? (rewritePayload.result as OptimizationResult | null)
+              : (rewritePayload as OptimizationResult | null);
+
+          if (result) {
+            restoredOptimizations[product.id] = result;
+            if (entry?.rewrite) {
+              restoredRewriteIds[product.id] = entry.rewrite.id;
+            }
+          }
+        }
+
+        setAnalyses(restoredAnalyses);
+        setAnalysisIds(restoredAnalysisIds);
+        setOptimizations(restoredOptimizations);
+        setRewriteIds(restoredRewriteIds);
+        setProgress(restoredProgress);
+        setStoreUrl(data.store.base_url ?? "");
+        setProducts(data.products ?? []);
+        setLimit(Math.min(5, data.products?.length ?? 5));
+        setRestoreStatus("success");
+        setRestoreMessage("Tidligere scan er indlæst.");
+      } catch (error) {
+        console.error(error);
+        if (!aborted) {
           setRestoreStatus("error");
           setRestoreMessage("Kunne ikke indlæse tidligere scan.");
           window.localStorage.removeItem(STORAGE_KEY);
-        });
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+        }
+      } finally {
+        if (!aborted) {
+          setIsProductsLoading(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      aborted = true;
+    };
   }, []);
 
   // Re-fetch produkter når filtre ændres
   useEffect(() => {
     if (!storeId) return;
 
+    const controller = new AbortController();
     const queryParams = new URLSearchParams({
       storeId,
       ...(filters.brand && { brand: filters.brand }),
@@ -428,7 +475,11 @@ export default function Home() {
       sortOrder: filters.sortOrder,
     });
 
-    fetch(`/api/store?${queryParams.toString()}`)
+    setIsProductsLoading(true);
+
+    fetch(`/api/store?${queryParams.toString()}`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
         if (!response.ok) return;
         const data = await response.json();
@@ -436,7 +487,16 @@ export default function Home() {
       })
       .catch(() => {
         // Ignorer fejl ved filter-ændring
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsProductsLoading(false);
+        }
       });
+
+    return () => {
+      controller.abort();
+    };
   }, [storeId, filters]);
 
   useEffect(() => {
@@ -481,6 +541,10 @@ export default function Home() {
     setShortInstruction(DEFAULT_SHORT_TEXT_INSTRUCTION);
     setLongInstruction(DEFAULT_LONG_TEXT_INSTRUCTION);
     setCustomRewrites({});
+    setAnalysisIds({});
+    setRewriteIds({});
+    setDeleteState({});
+    setIsProductsLoading(false);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
@@ -504,12 +568,19 @@ export default function Home() {
 
     setError(null);
     setIsDiscovering(true);
+    setIsProductsLoading(true);
     setProducts([]);
     setStoreId(null);
     setAnalyses({});
     setOptimizations({});
     setSelectedIds([]);
     setProgress({});
+    setAnalysisIds({});
+    setRewriteIds({});
+    setCustomRewrites({});
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(CUSTOM_REWRITE_STORAGE_KEY);
+    }
 
     try {
       const response = await fetch("/api/discover", {
@@ -548,6 +619,7 @@ export default function Home() {
       );
     } finally {
       setIsDiscovering(false);
+      setIsProductsLoading(false);
     }
   };
 
@@ -648,19 +720,25 @@ export default function Home() {
 
       const nextAnalyses = { ...analyses };
       const nextProgress = { ...progress };
+      const nextAnalysisIdsMap = { ...analysisIds };
 
       data.results?.forEach(
         (result: {
           productId: string;
           analysis: Analysis;
+          analysisId?: string;
         }) => {
           nextAnalyses[result.productId] = result.analysis;
           nextProgress[result.productId] = "done";
+          if (result.analysisId) {
+            nextAnalysisIdsMap[result.productId] = result.analysisId;
+          }
         }
       );
 
       setAnalyses(nextAnalyses);
       setProgress(nextProgress);
+      setAnalysisIds(nextAnalysisIdsMap);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Uventet fejl under analyse."
@@ -705,12 +783,83 @@ export default function Home() {
         short: data.rewrite.short_description ?? "",
         long: data.rewrite.description ?? "",
       });
+      if (data.analysisId) {
+        setRewriteIds((prev) => ({ ...prev, [product.id]: data.analysisId }));
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Uventet fejl under optimering."
       );
     } finally {
       setOptimizing((prev) => ({ ...prev, [product.id]: false }));
+    }
+  };
+
+  const handleDeleteResult = async (
+    productId: string,
+    kind: "analysis" | "rewrite"
+  ) => {
+    const targetId =
+      kind === "analysis" ? analysisIds[productId] : rewriteIds[productId];
+    if (!targetId) return;
+
+    setError(null);
+    setDeleteState((prev) => ({
+      ...prev,
+      [productId]: { ...(prev[productId] ?? {}), [kind]: true },
+    }));
+
+    try {
+      const response = await fetch("/api/analysis", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysisId: targetId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          data?.error ?? "Kunne ikke slette resultatet fra databasen."
+        );
+      }
+
+      if (kind === "analysis") {
+        setAnalyses((prev) => {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        });
+        setAnalysisIds((prev) => {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        });
+        setProgress((prev) => ({ ...prev, [productId]: "idle" }));
+      } else {
+        setOptimizations((prev) => {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        });
+        setRewriteIds((prev) => {
+          const next = { ...prev };
+          delete next[productId];
+          return next;
+        });
+        removeCustomRewrite(productId);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Uventet fejl ved sletning af resultat."
+      );
+    } finally {
+      setDeleteState((prev) => {
+        const entry = prev[productId] ?? {};
+        const nextEntry = { ...entry, [kind]: false };
+        const next = { ...prev, [productId]: nextEntry };
+        return next;
+      });
     }
   };
 
@@ -800,7 +949,7 @@ export default function Home() {
               </button>
             </div>
 
-            {products.length > 0 && (
+            {(isProductsLoading || products.length > 0) && (
               <div className="rounded-3xl border border-white/5 bg-white/5 p-6 shadow-xl shadow-black/30 backdrop-blur">
                 <div className="flex items-center justify-between">
                   <div>
@@ -816,202 +965,230 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Filtrering */}
-                <div className="mt-5 space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-                  <p className="text-sm font-semibold text-white">Filtrer & sorter</p>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Brand filter */}
-                    {(() => {
-                      const uniqueBrands = Array.from(
-                        new Set(products.map((p) => p.brand).filter(Boolean))
-                      ).sort();
-                      if (uniqueBrands.length === 0) return null;
-                      return (
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">
-                            Brand
-                          </label>
-                          <select
-                            value={filters.brand || ""}
-                            onChange={(e) =>
-                              setFilters((prev) => ({ ...prev, brand: e.target.value }))
-                            }
-                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                          >
-                            <option value="">Alle brands</option>
-                            {uniqueBrands.map((brand) => (
-                              <option key={brand} value={brand || ""}>
-                                {brand}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Category filter */}
-                    {(() => {
-                      const allCategories = new Set<string>();
-                      products.forEach((p) => {
-                        p.category_names?.forEach((cat) => allCategories.add(cat));
-                      });
-                      const uniqueCategories = Array.from(allCategories).sort();
-                      if (uniqueCategories.length === 0) return null;
-                      return (
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">
-                            Kategori
-                          </label>
-                          <select
-                            value={filters.category}
-                            onChange={(e) =>
-                              setFilters((prev) => ({ ...prev, category: e.target.value }))
-                            }
-                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                          >
-                            <option value="">Alle kategorier</option>
-                            {uniqueCategories.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })()}
+                {isProductsLoading ? (
+                  <div className="mt-6 flex h-48 items-center justify-center gap-3 text-slate-300">
+                    <Loader2 className="size-5 animate-spin text-emerald-300" />
+                    Henter produkter fra Supabase...
                   </div>
+                ) : (
+                  <>
+                    {/* Filtrering */}
+                    <div className="mt-5 space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                      <p className="text-sm font-semibold text-white">
+                        Filtrer & sorter
+                      </p>
 
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={filters.onSale}
-                        onChange={(e) =>
-                          setFilters((prev) => ({ ...prev, onSale: e.target.checked }))
-                        }
-                        className="size-4 accent-emerald-400"
-                      />
-                      På tilbud
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={filters.featured}
-                        onChange={(e) =>
-                          setFilters((prev) => ({ ...prev, featured: e.target.checked }))
-                        }
-                        className="size-4 accent-emerald-400"
-                      />
-                      Featured
-                    </label>
-                  </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Brand filter */}
+                        {(() => {
+                          const uniqueBrands = Array.from(
+                            new Set(products.map((p) => p.brand).filter(Boolean))
+                          ).sort();
+                          if (uniqueBrands.length === 0) return null;
+                          return (
+                            <div>
+                              <label className="mb-1 block text-xs text-slate-400">
+                                Brand
+                              </label>
+                              <select
+                                value={filters.brand || ""}
+                                onChange={(e) =>
+                                  setFilters((prev) => ({
+                                    ...prev,
+                                    brand: e.target.value,
+                                  }))
+                                }
+                                className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                              >
+                                <option value="">Alle brands</option>
+                                {uniqueBrands.map((brand) => (
+                                  <option key={brand} value={brand || ""}>
+                                    {brand}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">
-                        Sorter efter
-                      </label>
-                      <select
-                        value={filters.sortBy}
-                        onChange={(e) =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            sortBy: e.target.value as "name" | "date_created" | "price",
-                          }))
-                        }
-                        className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                      >
-                        <option value="name">Navn</option>
-                        <option value="date_created">Oprettelsesdato</option>
-                        <option value="price">Pris</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">
-                        Rækkefølge
-                      </label>
-                      <select
-                        value={filters.sortOrder}
-                        onChange={(e) =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            sortOrder: e.target.value as "asc" | "desc",
-                          }))
-                        }
-                        className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                      >
-                        <option value="asc">Stigende</option>
-                        <option value="desc">Faldende</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex items-center gap-3">
-                  <label className="text-sm text-slate-400">
-                    Antal (top fra listen)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={Math.min(50, products.length)}
-                    value={limit}
-                    onChange={(event) =>
-                      setLimit(
-                        Math.max(
-                          1,
-                          Math.min(
-                            Number(event.target.value),
-                            Math.min(50, products.length)
-                          )
-                        )
-                      )
-                    }
-                    className="w-20 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-center text-white outline-none focus:border-emerald-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedIds(products.slice(0, limit).map((p) => p.id))
-                    }
-                    className="rounded-xl border border-emerald-400/50 px-3 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
-                  >
-                    Vælg top {limit}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIds([])}
-                    className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:border-white/30"
-                  >
-                    Ryd valg
-                  </button>
-                </div>
-
-                <div className="mt-6 max-h-[360px] space-y-3 overflow-y-auto pr-2">
-                  {products.map((product) => (
-                    <label
-                      key={product.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3 transition hover:border-white/15"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(product.id)}
-                        onChange={() => toggleSelection(product.id)}
-                        className="mt-1 size-4 accent-emerald-400"
-                      />
-                      <div>
-                        <p className="font-semibold text-white">
-                          {product.name}
-                        </p>
-                        <p className="text-sm text-slate-400">
-                          {product.short_description?.slice(0, 120) ??
-                            "Ingen kort beskrivelse"}
-                        </p>
+                        {/* Category filter */}
+                        {(() => {
+                          const allCategories = new Set<string>();
+                          products.forEach((p) => {
+                            p.category_names?.forEach((cat) =>
+                              allCategories.add(cat)
+                            );
+                          });
+                          const uniqueCategories = Array.from(allCategories).sort();
+                          if (uniqueCategories.length === 0) return null;
+                          return (
+                            <div>
+                              <label className="mb-1 block text-xs text-slate-400">
+                                Kategori
+                              </label>
+                              <select
+                                value={filters.category}
+                                onChange={(e) =>
+                                  setFilters((prev) => ({
+                                    ...prev,
+                                    category: e.target.value,
+                                  }))
+                                }
+                                className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                              >
+                                <option value="">Alle kategorier</option>
+                                {uniqueCategories.map((cat) => (
+                                  <option key={cat} value={cat}>
+                                    {cat}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
                       </div>
-                    </label>
-                  ))}
-                </div>
+
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={filters.onSale}
+                            onChange={(e) =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                onSale: e.target.checked,
+                              }))
+                            }
+                            className="size-4 accent-emerald-400"
+                          />
+                          På tilbud
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={filters.featured}
+                            onChange={(e) =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                featured: e.target.checked,
+                              }))
+                            }
+                            className="size-4 accent-emerald-400"
+                          />
+                          Featured
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">
+                            Sorter efter
+                          </label>
+                          <select
+                            value={filters.sortBy}
+                            onChange={(e) =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                sortBy: e.target.value as
+                                  | "name"
+                                  | "date_created"
+                                  | "price",
+                              }))
+                            }
+                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                          >
+                            <option value="name">Navn</option>
+                            <option value="date_created">Oprettelsesdato</option>
+                            <option value="price">Pris</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-slate-400">
+                            Rækkefølge
+                          </label>
+                          <select
+                            value={filters.sortOrder}
+                            onChange={(e) =>
+                              setFilters((prev) => ({
+                                ...prev,
+                                sortOrder: e.target.value as "asc" | "desc",
+                              }))
+                            }
+                            className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+                          >
+                            <option value="asc">Stigende</option>
+                            <option value="desc">Faldende</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex items-center gap-3">
+                      <label className="text-sm text-slate-400">
+                        Antal (top fra listen)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.min(50, products.length)}
+                        value={limit}
+                        onChange={(event) =>
+                          setLimit(
+                            Math.max(
+                              1,
+                              Math.min(
+                                Number(event.target.value),
+                                Math.min(50, products.length)
+                              )
+                            )
+                          )
+                        }
+                        className="w-20 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-center text-white outline-none focus:border-emerald-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedIds(products.slice(0, limit).map((p) => p.id))
+                        }
+                        className="rounded-xl border border-emerald-400/50 px-3 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                      >
+                        Vælg top {limit}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIds([])}
+                        className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:border-white/30"
+                      >
+                        Ryd valg
+                      </button>
+                    </div>
+
+                    <div className="mt-6 max-h-[360px] space-y-3 overflow-y-auto pr-2">
+                      {products.map((product) => (
+                        <label
+                          key={product.id}
+                          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3 transition hover:border-white/15"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(product.id)}
+                            onChange={() => toggleSelection(product.id)}
+                            className="mt-1 size-4 accent-emerald-400"
+                          />
+                          <div>
+                            <p className="font-semibold text-white">
+                              {product.name}
+                            </p>
+                            <p className="text-sm text-slate-400">
+                              {product.short_description?.slice(0, 120) ??
+                                "Ingen kort beskrivelse"}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1241,6 +1418,25 @@ export default function Home() {
 
                         {analysis && (
                           <div className="mt-4 space-y-5 text-sm text-slate-200">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  !analysisIds[product.id] ||
+                                  deleteState[product.id]?.analysis
+                                }
+                                onClick={() => handleDeleteResult(product.id, "analysis")}
+                                className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-rose-300 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {deleteState[product.id]?.analysis ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-3" />
+                                )}
+                                Slet analyse
+                              </button>
+                            </div>
+
                             <div>
                               <div className="flex items-center justify-between">
                                 <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
@@ -1350,6 +1546,24 @@ export default function Home() {
                                 </>
                               )}
                             </button>
+                            {hasRewrite && (
+                              <button
+                                type="button"
+                                disabled={
+                                  !rewriteIds[product.id] ||
+                                  deleteState[product.id]?.rewrite
+                                }
+                                onClick={() => handleDeleteResult(product.id, "rewrite")}
+                                className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-rose-300 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {deleteState[product.id]?.rewrite ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                                Slet tekst
+                              </button>
+                            )}
 
                             {hasRewrite && (
                               <div className="space-y-4 text-sm text-slate-200">
