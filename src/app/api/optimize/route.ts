@@ -129,13 +129,10 @@ export async function POST(request: Request) {
           content: [
             "Du er en dansk copywriter for e-commerce. Du modtager produktinformation og skal levere en optimeret kort beskrivelse samt en længere beskrivelse.",
             "Ignorér størrelsesguider og kundeanmeldelser, da de håndteres separat på websitet.",
-            "Lav separate optimeringsforslag for kort og lang tekst.",
-            "Den korte tekst skal også være HTML, starte med en kort hook-sætning og efterfølges af en <ul> med 2-4 <li> punktopstillinger over USP'er – alle med relevante emojis.",
-            "Longform-teksten skal være HTML med <strong>bold</strong>, <em>italics</em> ved behov, bullet-lister og relevante emojis. Brug tydelige sektionstitler.",
             depthInstruction,
             "Returnér altid gyldigt JSON med felterne short_description, description (HTML-string) og valgfrit notes (array af strenge).",
             instructions?.trim()
-              ? `Yderligere instruktioner:\n${instructions.trim()}`
+              ? `Instruktioner:\n${instructions.trim()}`
               : null,
           ]
             .filter(Boolean)
@@ -149,8 +146,8 @@ Beskrivelse: ${product.description ?? "N/A"}
 Funktion: ${product.raw && typeof product.raw === "object" ? JSON.stringify(product.raw) : "N/A"}
 
 Lever nu:
-- En forbedret kort tekst (max 400 tegn) i HTML med hook + <ul> med 2-4 USP'er og emojis.
-- En forbedret lang tekst med fokus på funktion, skader, forebyggelse og potentielle kundespørgsmål.
+- En forbedret kort tekst i HTML.
+- En forbedret lang tekst.
 - Eventuelle noter/råd til shop-ejeren.`,
         },
       ],
