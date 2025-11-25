@@ -196,7 +196,15 @@ export default function Home() {
     Record<string, OptimizationResult>
   >({});
   const [optimizing, setOptimizing] = useState<Record<string, boolean>>({});
-  const [longDepth, setLongDepth] = useState(3);
+  const [longDepth, setLongDepth] = useState(() => {
+    if (typeof window === "undefined") return 5;
+    try {
+      const stored = window.localStorage.getItem(LONG_DEPTH_STORAGE_KEY);
+      return stored ? Number(stored) : 5;
+    } catch {
+      return 5;
+    }
+  });
   const [filters, setFilters] = useState({
     brand: "",
     category: "",
@@ -330,15 +338,17 @@ export default function Home() {
     setProducts([]);
     setSelectedIds([]);
     setAnalyses({});
+    setOptimizations({});
     setProgress({});
     setStoreUrl("");
     setRestoreMessage(null);
     setRestoreStatus("idle");
     setInstructionSettings(DEFAULT_INSTRUCTIONS);
-    setLongDepth(3);
+    setLongDepth(5);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
+      window.localStorage.removeItem(LONG_DEPTH_STORAGE_KEY);
     }
   };
 
@@ -420,6 +430,12 @@ export default function Home() {
       }
       return next;
     });
+  };
+  const handleLongDepthChange = (value: number) => {
+    setLongDepth(value);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LONG_DEPTH_STORAGE_KEY, String(value));
+    }
   };
   const currentInstructions = buildInstructionText(instructionSettings);
 
@@ -884,7 +900,9 @@ export default function Home() {
                     min={1}
                     max={5}
                     value={longDepth}
-                    onChange={(event) => setLongDepth(Number(event.target.value))}
+                    onChange={(event) =>
+                      handleLongDepthChange(Number(event.target.value))
+                    }
                     className="w-full accent-violet-400"
                   />
                   <p className="text-xs text-slate-400">
