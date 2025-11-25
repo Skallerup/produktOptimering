@@ -62,6 +62,22 @@ const STORAGE_KEY = "produktoptimering:lastStore";
 const INSTRUCTION_STORAGE_KEY = "produktoptimering:instructions";
 const LONG_DEPTH_STORAGE_KEY = "produktoptimering:longDepth";
 const OPENAI_KEY_STORAGE_KEY = "produktoptimering:openaiKey";
+const SHORT_TEXT_INSTRUCTION_STORAGE_KEY =
+  "produktoptimering:shortInstruction";
+const LONG_TEXT_INSTRUCTION_STORAGE_KEY = "produktoptimering:longInstruction";
+
+const DEFAULT_SHORT_TEXT_INSTRUCTION = [
+  "Start med en kort hook-sætning (max 1-2 linjer) i HTML.",
+  "Tilføj derefter en <ul> med 2-4 <li> punktopstillinger, hvor hvert punkt beskriver en USP med både konkret benefit og en relevant emoji.",
+  "Hold tonen inspirerende, men præcis – ingen fyldord og ingen omtale af størrelsesguides eller anmeldelser.",
+].join("\n");
+
+const DEFAULT_LONG_TEXT_INSTRUCTION = [
+  "Skriv longform-teksten i HTML med tydelige sektionstitler i <strong>bold</strong> og eventuelt <em>italics</em> til nøgleord.",
+  "Brug storytelling, scenarier og konkrete eksempler på hvordan produktet løser problemer, forebygger skader eller forbedrer hverdagen.",
+  "Inddrag bullet-lister, CTA microcopy og relevante emojis til at fremhæve benefits.",
+  "Dæk både funktioner, materialer, pleje, garanti og svar på typiske kundespørgsmål – niveau: Ekspert.",
+].join("\n");
 
 type InstructionSettings = {
   ignoreSizes: boolean;
@@ -214,6 +230,28 @@ export default function Home() {
       return 5;
     }
   });
+  const [shortInstruction, setShortInstruction] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_SHORT_TEXT_INSTRUCTION;
+    try {
+      return (
+        window.localStorage.getItem(SHORT_TEXT_INSTRUCTION_STORAGE_KEY) ??
+        DEFAULT_SHORT_TEXT_INSTRUCTION
+      );
+    } catch {
+      return DEFAULT_SHORT_TEXT_INSTRUCTION;
+    }
+  });
+  const [longInstruction, setLongInstruction] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_LONG_TEXT_INSTRUCTION;
+    try {
+      return (
+        window.localStorage.getItem(LONG_TEXT_INSTRUCTION_STORAGE_KEY) ??
+        DEFAULT_LONG_TEXT_INSTRUCTION
+      );
+    } catch {
+      return DEFAULT_LONG_TEXT_INSTRUCTION;
+    }
+  });
   const [filters, setFilters] = useState({
     brand: "",
     category: "",
@@ -354,10 +392,14 @@ export default function Home() {
     setRestoreStatus("idle");
     setInstructionSettings(DEFAULT_INSTRUCTIONS);
     setLongDepth(5);
+    setShortInstruction(DEFAULT_SHORT_TEXT_INSTRUCTION);
+    setLongInstruction(DEFAULT_LONG_TEXT_INSTRUCTION);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(INSTRUCTION_STORAGE_KEY);
       window.localStorage.removeItem(LONG_DEPTH_STORAGE_KEY);
+      window.localStorage.removeItem(SHORT_TEXT_INSTRUCTION_STORAGE_KEY);
+      window.localStorage.removeItem(LONG_TEXT_INSTRUCTION_STORAGE_KEY);
     }
   };
 
@@ -448,6 +490,19 @@ export default function Home() {
   };
   const currentInstructions = buildInstructionText(instructionSettings);
 
+  const buildRewriteInstructions = () =>
+    [
+      currentInstructions,
+      shortInstruction.trim()
+        ? `Instruktion til kort tekst:\n${shortInstruction.trim()}`
+        : null,
+      longInstruction.trim()
+        ? `Instruktion til lang tekst:\n${longInstruction.trim()}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
   const handleAnalyze = async () => {
     if (!storeId) {
       setError("Scan butikken først.");
@@ -530,7 +585,7 @@ export default function Home() {
         body: JSON.stringify({
           productId: product.id,
           openAiKey,
-          instructions: currentInstructions,
+          instructions: buildRewriteInstructions(),
           depthLevel: longDepth,
         }),
       });
@@ -896,6 +951,54 @@ export default function Home() {
                       </label>
                     ))}
                   </div>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <label className="text-sm font-semibold text-white">
+                    Tekstinstruktion – kort tekst
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={shortInstruction}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setShortInstruction(value);
+                      if (typeof window !== "undefined") {
+                        window.localStorage.setItem(
+                          SHORT_TEXT_INSTRUCTION_STORAGE_KEY,
+                          value
+                        );
+                      }
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none focus:border-violet-300"
+                  />
+                  <p className="text-xs text-slate-400">
+                    Forudfyldt med dine ønsker til hook, emojis og USP-bullets –
+                    tilpas efter behov.
+                  </p>
+                </div>
+                <div className="space-y-2 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+                  <label className="text-sm font-semibold text-white">
+                    Tekstinstruktion – lang tekst
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={longInstruction}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setLongInstruction(value);
+                      if (typeof window !== "undefined") {
+                        window.localStorage.setItem(
+                          LONG_TEXT_INSTRUCTION_STORAGE_KEY,
+                          value
+                        );
+                      }
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none focus:border-violet-300"
+                  />
+                  <p className="text-xs text-slate-400">
+                    Beskriv hvordan AI skal levere den dybdegående longform med
+                    sektioner, CTA og storytelling.
+                  </p>
                 </div>
                 <div className="space-y-2 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
                   <div className="flex items-center justify-between text-sm text-slate-200">
